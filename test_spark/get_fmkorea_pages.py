@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,7 @@ BASE_URL = (
 )
 DEFAULT_MIN_DELAY = 4.0
 DEFAULT_MAX_DELAY = 8.0
+POST_ID_RE = re.compile(r"/community/go/fmkorea/(\d+)(?:$|[/?#])")
 BLOCK_MARKERS = (
     "captcha",
     "cloudflare",
@@ -34,6 +36,60 @@ BLOCK_MARKERS = (
     "too many requests",
     "just a moment",
 )
+
+
+@dataclass(frozen=True)
+class CrawledPost(Post):
+    """펨코 게시물 목록에서 수집한 게시물 정보."""
+
+    url: str
+    postid: str
+
+
+def parse_page_posts(html: str) -> list[CrawledPost]:
+    """게시물 목록에서 기존 정보와 게시물 URL/postid를 함께 추출한다."""
+    soup = BeautifulSoup(html, "html.parser")
+    parsed_posts = parse_posts(html)
+    posts: list[CrawledPost] = []
+    candidate_rows = []
+    for row in soup.select("table tbody tr"):
+        source = row.select_one("td.rank_bg small")
+        title_element = row.select_one(".title")
+        date_element = row.select_one(".second_date span")
+        if not source or source.get_text(strip=True) != "펨코":
+            continue
+        if not title_element or not date_element:
+            continue
+        if COMMENT_COUNT_RE.search(title_element.get_text(" ", strip=True)) is None:
+            continue
+        candidate_rows.append(row)
+
+    for row, post in zip(
+        candidate_rows,
+        parsed_posts,
+    ):
+        title_link = row.select_one(".title a[href]")
+        if title_link is None:
+            continue
+
+        source_url = title_link.get("href", "").strip()
+        match = POST_ID_RE.search(source_url)
+        if match is None:
+            continue
+        postid = match.group(1)
+        url = f"https://www.fmkorea.com/{postid}"
+
+        posts.append(
+            CrawledPost(
+                time=post.time,
+                title=post.title,
+                comments=post.comments,
+                url=url,
+                postid=postid,
+            )
+        )
+
+    return posts
 
 
 def log_page_diagnostics(*, url: str, driver: webdriver.Chrome, page_posts: list[Post]) -> None:
@@ -168,7 +224,7 @@ def fetch_pages(
                     f"{page}페이지에서 브라우저 인증 또는 게시글 로딩이 완료되지 않았습니다."
                 ) from error
 
-            page_posts = parse_posts(driver.page_source)
+            page_posts = parse_page_posts(driver.page_source)
             log_page_diagnostics(
                 url=url,
                 driver=driver,
