@@ -1,0 +1,40 @@
+name: Crawl FMKorea comments
+
+on:
+  workflow_dispatch:
+    inputs:
+      post_id:
+        description: "FMKorea post number"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Crawl comments
+        run: python test_spark/get_fmkorea_comments.py --post-id "${{ inputs.post_id }}" --output result.json
+
+      - name: Upload JSON result
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmkorea-comments-${{ inputs.post_id }}
+          path: result.json
+          if-no-files-found: error
+          retention-days: 1
