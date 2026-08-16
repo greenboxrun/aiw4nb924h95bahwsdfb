@@ -11,8 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from bs4 import BeautifulSoup
 
-from get_fmkorea_list import Post, parse_posts
+from get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
 
 
 BASE_URL = (
@@ -21,6 +22,76 @@ BASE_URL = (
 )
 DEFAULT_MIN_DELAY = 4.0
 DEFAULT_MAX_DELAY = 8.0
+BLOCK_MARKERS = (
+    "captcha",
+    "cloudflare",
+    "access denied",
+    "blocked",
+    "too many requests",
+    "just a moment",
+)
+
+
+def log_page_diagnostics(
+    *,
+    url: str,
+    response: requests.Response,
+    page_posts: list[Post],
+) -> None:
+    """페이지 응답과 파싱 결과를 원인 분석용으로 상세히 출력한다."""
+    soup = BeautifulSoup(response.text, "html.parser")
+    rows = soup.select("table tbody tr")
+    source_rows = soup.select("table tbody tr td.rank_bg.s_bg_fmkorea")
+    source_texts = [
+        cell.get_text(" ", strip=True)
+        for cell in soup.select("table tbody tr td.rank_bg small")
+    ]
+    comment_format_failures = 0
+    for row in rows:
+        title_element = row.select_one(".title")
+        if title_element and COMMENT_COUNT_RE.search(
+            title_element.get_text(" ", strip=True)
+        ) is None:
+            comment_format_failures += 1
+
+    response_lower = response.text.lower()
+    detected_markers = [
+        marker for marker in BLOCK_MARKERS if marker in response_lower
+    ]
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+
+    print(f"[진단] 요청 URL: {url}")
+    print(f"[진단] HTTP 상태: {response.status_code}")
+    print(f"[진단] 최종 URL: {response.url}")
+    print(f"[진단] Content-Type: {response.headers.get('Content-Type', '')}")
+    print(
+        "[진단] 인코딩: "
+        f"response={response.encoding!r}, apparent={response.apparent_encoding!r}"
+    )
+    print(
+        "[진단] 응답 크기: "
+        f"{len(response.content):,} bytes / {len(response.text):,} chars"
+    )
+    print(f"[진단] HTML 제목: {title!r}")
+    print(
+        "[진단] HTML 구조: "
+        f"table={len(soup.select('table'))}, tr={len(rows)}"
+    )
+    print(
+        "[진단] 게시판 식별: "
+        f"class=s_bg_fmkorea {len(source_rows)}개, 텍스트 '펨코' "
+        f"{response.text.count('펨코')}회"
+    )
+    print(f"[진단] 파싱 결과: {len(page_posts)}개")
+    print(f"[진단] 댓글 수 형식 불일치: {comment_format_failures}개")
+    print(f"[진단] 차단 의심 키워드: {detected_markers or '없음'}")
+
+    if source_texts:
+        print(f"[진단] 발견된 게시판 텍스트 샘플: {source_texts[:10]!r}")
+
+    if not page_posts:
+        snippet = " ".join(response.text[:800].split())
+        print(f"[진단] 0개 응답 앞부분(최대 800자): {snippet!r}")
 
 
 def write_json(
@@ -68,6 +139,16 @@ def fetch_pages(
         response = session.get(url, timeout=20)
         response.raise_for_status()
         page_posts = parse_posts(response.text)
+        log_page_diagnostics(
+            url=url,
+            response=response,
+            page_posts=page_posts,
+        )
+        if not page_posts:
+            raise RuntimeError(
+                f"{page}페이지에서 게시글을 찾지 못했습니다. "
+                "위의 [진단] 로그를 확인하세요."
+            )
         posts.extend(page_posts)
         print(f"{page}/{page_count}페이지 수집 완료: {len(page_posts)}개")
 

@@ -2,8 +2,8 @@ name: Crawl FMKorea posts
 
 on:
   schedule:
-    # GitHub Actions 예약 실행의 최소 간격은 5분입니다.
-    - cron: "*/5 * * * *"
+    # UTC 기준 6시간마다 실행합니다. 수동 실행은 workflow_dispatch를 사용합니다.
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
