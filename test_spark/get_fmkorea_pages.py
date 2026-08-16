@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import time
-from datetime import datetime
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
-from get_fmkorea_list import Post, parse_posts, write_csv
+from get_fmkorea_list import Post, parse_posts
 
 
 BASE_URL = (
@@ -19,6 +21,31 @@ BASE_URL = (
 )
 DEFAULT_MIN_DELAY = 4.0
 DEFAULT_MAX_DELAY = 8.0
+
+
+def write_json(
+    posts: list[Post],
+    output: Path,
+    *,
+    page_count: int,
+) -> None:
+    """수집 결과와 재사용에 도움이 되는 메타정보를 JSON으로 저장한다."""
+    saved_at = datetime.now().astimezone()
+    payload = {
+        "schema_version": 1,
+        "source_url": BASE_URL,
+        "pages_requested": page_count,
+        "post_count": len(posts),
+        "created_at": saved_at.isoformat(timespec="seconds"),
+        "created_at_utc": saved_at.astimezone(timezone.utc).isoformat(
+            timespec="seconds"
+        ),
+        "posts": [asdict(post) for post in posts],
+    }
+
+    with output.open("w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, indent=2)
+        file.write("\n")
 
 
 def fetch_pages(
@@ -67,17 +94,26 @@ def main() -> int:
         default=DEFAULT_MAX_DELAY,
         help="페이지 사이 최대 대기 초(기본값: 8)",
     )
-    parser.add_argument("-o", "--output", type=Path, help="CSV 저장 경로")
+    parser.add_argument("-o", "--output", type=Path, help="JSON 저장 경로")
     args = parser.parse_args()
 
     posts = fetch_pages(args.pages, args.min_delay, args.max_delay)
     output = args.output or (
-        Path(__file__).resolve().parent
-        / "log"
-        / f"{datetime.now():%Y%m%d%H%M%S}.csv"
+        Path(__file__).resolve().parent.parent
+        / "result"
+        / "result.json"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(posts, output)
+    temporary_output = output.with_name(f".{output.name}.tmp")
+    try:
+        write_json(
+            posts,
+            temporary_output,
+            page_count=args.pages,
+        )
+        temporary_output.replace(output)
+    finally:
+        temporary_output.unlink(missing_ok=True)
     print(f"총 {len(posts)}개 게시글을 저장했습니다: {output}")
     return 0
 
