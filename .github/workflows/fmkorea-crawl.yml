@@ -2,8 +2,8 @@ name: Crawl FMKorea posts
 
 on:
   schedule:
-    # UTC 기준 6시간마다 실행합니다. 수동 실행은 workflow_dispatch를 사용합니다.
-    - cron: "0 */6 * * *"
+    # UTC 기준 5분마다 실행합니다. 수동 실행은 workflow_dispatch를 사용합니다.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
