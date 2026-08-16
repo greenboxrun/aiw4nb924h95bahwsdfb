@@ -147,6 +147,32 @@ def parse_comment_page(html: str, post_url: str) -> tuple[list[dict[str, Any]], 
     return comments, max(1, total_pages)
 
 
+def parse_post_content(html: str) -> tuple[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    title = ""
+    for selector in (".np_18px", ".rd_title h1", ".rd_title", "h1"):
+        node = soup.select_one(selector)
+        if node and normalize_text(node.get_text(" ", strip=True)):
+            title = normalize_text(node.get_text(" ", strip=True))
+            break
+    if not title:
+        meta = soup.select_one('meta[property="og:title"], meta[name="title"]')
+        title = normalize_text(meta.get("content") if meta else "")
+    if not title and soup.title:
+        title = normalize_text(soup.title.get_text(" ", strip=True))
+
+    body = ""
+    for selector in (".rd_body .xe_content", ".rd_body article", ".document .xe_content", "article .xe_content"):
+        node = soup.select_one(selector)
+        if node:
+            for removable in node.select("script, style, noscript, template, img, video, audio, iframe"):
+                removable.decompose()
+            body = normalize_text(node.get_text(" ", strip=True))
+            if body:
+                break
+    return title, body
+
+
 def create_driver() -> webdriver.Chrome:
     options = Options()
     options.page_load_strategy = "eager"
@@ -165,6 +191,8 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
     driver = create_driver()
     pages: list[dict[str, Any]] = []
     unique_comments: dict[int, dict[str, Any]] = {}
+    post_title = ""
+    post_body = ""
 
     try:
         for page_number in range(1, MAX_PAGE + 1):
@@ -188,7 +216,10 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
                     raise CrawlError("FMKorea access was blocked; no retry was attempted")
                 raise CrawlError(f"comment DOM did not load on page {page_number}")
 
-            page_comments, total_pages = parse_comment_page(driver.page_source, post_url)
+            page_html = driver.page_source
+            if page_number == 1:
+                post_title, post_body = parse_post_content(page_html)
+            page_comments, total_pages = parse_comment_page(page_html, post_url)
             pages.append(
                 {
                     "page_number": page_number,
@@ -213,6 +244,8 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
         "schema_version": 1,
         "post_id": str(post_id),
         "post_url": post_url,
+        "title": post_title,
+        "body": post_body,
         "pages_requested": MAX_PAGE,
         "pages_crawled": len(pages),
         "comment_count": len(unique_comments),

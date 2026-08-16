@@ -13,7 +13,7 @@ from typing import Any
 
 import requests
 
-from request_hello import GitHubError, create_session, load_token, request_json
+from request_hello import GitHubError, create_session, request_json
 
 
 OWNER = "greenboxrun"
@@ -25,6 +25,25 @@ ARTIFACT_PREFIX = "fmkorea-comments-"
 POLL_INTERVAL_SECONDS = 5
 DISPATCH_TIMEOUT_SECONDS = 45
 RUN_TIMEOUT_SECONDS = 600
+
+
+def load_github_token() -> str:
+    """Load GITHUB_TOKEN from the sibling 173day_api Worker env file."""
+    token_file = Path(__file__).resolve().parents[2] / "173day_api" / ".dev.vars"
+    if not token_file.is_file():
+        raise GitHubError(f"GitHub token file was not found: {token_file}")
+    for raw_line in token_file.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() != "GITHUB_TOKEN":
+            continue
+        token = value.strip().strip("'\"").strip()
+        if token:
+            return token
+        raise GitHubError("GITHUB_TOKEN is empty")
+    raise GitHubError(f"GITHUB_TOKEN was not found in {token_file}")
 
 
 def validate_post_id(value: str) -> str:
@@ -44,7 +63,7 @@ def dispatch_workflow(session: requests.Session, post_id: str) -> None:
         timeout=30,
     )
     if response.status_code != 204:
-        raise GitHubError(f"Workflow dispatch failed with {response.status_code}: {response.text[:500]}")
+        raise GitHubError(f"Workflow dispatch failed with status {response.status_code}")
 
 
 def wait_for_new_run(session: requests.Session, known_ids: set[int]) -> dict[str, Any]:
@@ -93,7 +112,7 @@ def download_result(session: requests.Session, run_id: int, post_id: str) -> dic
         raise GitHubError("The workflow artifact is invalid or expired")
     response = session.get(f"{API_BASE}/repos/{OWNER}/{REPOSITORY}/actions/artifacts/{artifact_id}/zip", timeout=60)
     if not response.ok:
-        raise GitHubError(f"Artifact download failed with {response.status_code}: {response.text[:500]}")
+        raise GitHubError(f"Artifact download failed with status {response.status_code}")
     try:
         with zipfile.ZipFile(BytesIO(response.content)) as archive:
             result_name = next((name for name in archive.namelist() if Path(name).name == "result.json"), None)
@@ -114,7 +133,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         post_id = validate_post_id(args.post_id)
-        session = create_session(load_token())
+        session = create_session(load_github_token())
         known_ids = {run_id for run in list_runs_for_workflow(session) if isinstance((run_id := run.get("id")), int)}
         dispatch_workflow(session, post_id)
         completed = wait_for_completion(session, wait_for_new_run(session, known_ids))
