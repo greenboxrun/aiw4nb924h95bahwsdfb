@@ -10,8 +10,12 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
 
 from get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
 
@@ -32,14 +36,10 @@ BLOCK_MARKERS = (
 )
 
 
-def log_page_diagnostics(
-    *,
-    url: str,
-    response: requests.Response,
-    page_posts: list[Post],
-) -> None:
+def log_page_diagnostics(*, url: str, driver: webdriver.Chrome, page_posts: list[Post]) -> None:
     """페이지 응답과 파싱 결과를 원인 분석용으로 상세히 출력한다."""
-    soup = BeautifulSoup(response.text, "html.parser")
+    html = driver.page_source
+    soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("table tbody tr")
     source_rows = soup.select("table tbody tr td.rank_bg.s_bg_fmkorea")
     source_texts = [
@@ -54,23 +54,20 @@ def log_page_diagnostics(
         ) is None:
             comment_format_failures += 1
 
-    response_lower = response.text.lower()
+    response_lower = html.lower()
     detected_markers = [
         marker for marker in BLOCK_MARKERS if marker in response_lower
     ]
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
 
     print(f"[진단] 요청 URL: {url}")
-    print(f"[진단] HTTP 상태: {response.status_code}")
-    print(f"[진단] 최종 URL: {response.url}")
-    print(f"[진단] Content-Type: {response.headers.get('Content-Type', '')}")
-    print(
-        "[진단] 인코딩: "
-        f"response={response.encoding!r}, apparent={response.apparent_encoding!r}"
-    )
+    print("[진단] HTTP 상태: Selenium 브라우저 탐색으로 직접 확인 불가")
+    print(f"[진단] 최종 URL: {driver.current_url}")
+    print("[진단] Content-Type: Selenium 브라우저 탐색으로 직접 확인 불가")
+    print(f"[진단] 인코딩: document.characterSet={driver.execute_script('return document.characterSet')!r}")
     print(
         "[진단] 응답 크기: "
-        f"{len(response.content):,} bytes / {len(response.text):,} chars"
+        f"{len(html.encode('utf-8')):,} bytes / {len(html):,} chars"
     )
     print(f"[진단] HTML 제목: {title!r}")
     print(
@@ -80,7 +77,7 @@ def log_page_diagnostics(
     print(
         "[진단] 게시판 식별: "
         f"class=s_bg_fmkorea {len(source_rows)}개, 텍스트 '펨코' "
-        f"{response.text.count('펨코')}회"
+        f"{html.count('펨코')}회"
     )
     print(f"[진단] 파싱 결과: {len(page_posts)}개")
     print(f"[진단] 댓글 수 형식 불일치: {comment_format_failures}개")
@@ -90,8 +87,23 @@ def log_page_diagnostics(
         print(f"[진단] 발견된 게시판 텍스트 샘플: {source_texts[:10]!r}")
 
     if not page_posts:
-        snippet = " ".join(response.text[:800].split())
+        snippet = " ".join(html[:800].split())
         print(f"[진단] 0개 응답 앞부분(최대 800자): {snippet!r}")
+
+
+def create_driver() -> webdriver.Chrome:
+    """GitHub Actions와 로컬에서 모두 동작하는 헤드리스 Chrome을 만든다."""
+    options = Options()
+    options.page_load_strategy = "eager"
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--lang=ko-KR")
+    options.add_argument("--user-agent=Mozilla/5.0")
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(45)
+    return driver
 
 
 def write_json(
@@ -130,32 +142,52 @@ def fetch_pages(
     if min_delay < 0 or max_delay < min_delay:
         raise ValueError("대기 시간 범위가 올바르지 않습니다.")
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    driver = create_driver()
     posts: list[Post] = []
 
-    for page in range(1, page_count + 1):
-        url = f"{BASE_URL}/{page}"
-        response = session.get(url, timeout=20)
-        response.raise_for_status()
-        page_posts = parse_posts(response.text)
-        log_page_diagnostics(
-            url=url,
-            response=response,
-            page_posts=page_posts,
-        )
-        if not page_posts:
-            raise RuntimeError(
-                f"{page}페이지에서 게시글을 찾지 못했습니다. "
-                "위의 [진단] 로그를 확인하세요."
-            )
-        posts.extend(page_posts)
-        print(f"{page}/{page_count}페이지 수집 완료: {len(page_posts)}개")
+    try:
+        for page in range(1, page_count + 1):
+            url = f"{BASE_URL}/{page}"
+            print(f"[브라우저] {page}페이지 접속: {url}")
+            try:
+                try:
+                    driver.get(url)
+                except TimeoutException:
+                    print(
+                        "[브라우저] 페이지 로딩 타임아웃이 발생했지만 "
+                        "게시글 DOM이 나타나는지 계속 확인합니다."
+                    )
+                WebDriverWait(driver, 35).until(
+                    lambda current_driver: current_driver.find_elements(
+                        By.CSS_SELECTOR, "td.rank_bg.s_bg_fmkorea"
+                    )
+                )
+            except TimeoutException as error:
+                log_page_diagnostics(url=url, driver=driver, page_posts=[])
+                raise RuntimeError(
+                    f"{page}페이지에서 브라우저 인증 또는 게시글 로딩이 완료되지 않았습니다."
+                ) from error
 
-        if page < page_count:
-            delay = random.uniform(min_delay, max_delay)
-            print(f"다음 요청까지 {delay:.1f}초 대기합니다.")
-            time.sleep(delay)
+            page_posts = parse_posts(driver.page_source)
+            log_page_diagnostics(
+                url=url,
+                driver=driver,
+                page_posts=page_posts,
+            )
+            if not page_posts:
+                raise RuntimeError(
+                    f"{page}페이지에서 게시글을 찾지 못했습니다. "
+                    "위의 [진단] 로그를 확인하세요."
+                )
+            posts.extend(page_posts)
+            print(f"{page}/{page_count}페이지 수집 완료: {len(page_posts)}개")
+
+            if page < page_count:
+                delay = random.uniform(min_delay, max_delay)
+                print(f"다음 요청까지 {delay:.1f}초 대기합니다.")
+                time.sleep(delay)
+    finally:
+        driver.quit()
 
     return posts
 
