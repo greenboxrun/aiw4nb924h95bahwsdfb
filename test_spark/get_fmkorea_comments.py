@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import requests
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -39,6 +42,12 @@ BLOCK_MARKERS = (
     "sign in",
     "log in",
 )
+
+
+def send_callback(url: str, payload: dict[str, object]) -> None:
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    response = requests.post(url, data=body, headers={"Content-Type": "application/json"}, timeout=30)
+    response.raise_for_status()
 
 
 class CrawlError(RuntimeError):
@@ -259,6 +268,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect FMKorea comments from pages 1 through 7")
     parser.add_argument("--post-id", required=True, help="FMKorea post number")
     parser.add_argument("-o", "--output", type=Path, default=Path("result.json"))
+    parser.add_argument(
+        "--callback-url",
+        default=os.environ.get("FMKOREA_CALLBACK_URL"),
+        help="Completed crawl callback URL",
+    )
     args = parser.parse_args()
     try:
         post_id = validate_post_id(args.post_id)
@@ -270,9 +284,16 @@ def main() -> int:
             temporary.replace(args.output)
         finally:
             temporary.unlink(missing_ok=True)
+        if args.callback_url:
+            send_callback(args.callback_url, {"success": True, "result": payload})
         print(f"saved {payload['comment_count']} comments to {args.output}")
         return 0
-    except CrawlError as error:
+    except Exception as error:
+        if args.callback_url:
+            try:
+                send_callback(args.callback_url, {"success": False, "error": str(error)})
+            except requests.RequestException as callback_error:
+                print(f"Callback failed: {callback_error}")
         print(f"FMKorea comment crawl failed: {error}")
         return 1
 

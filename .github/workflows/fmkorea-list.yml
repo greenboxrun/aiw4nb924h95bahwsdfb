@@ -1,4 +1,4 @@
-name: Crawl FMKorea list artifact
+name: Crawl FMKorea list callback
 
 on:
   workflow_dispatch:
@@ -7,6 +7,10 @@ on:
         description: "Number of FMKorea list pages to crawl (1-6)"
         required: false
         default: "6"
+        type: string
+      callback_url:
+        description: "Callback URL for the completed crawl"
+        required: true
         type: string
 
 permissions:
@@ -30,12 +34,6 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Crawl FMKorea list
+        env:
+          FMKOREA_CALLBACK_URL: ${{ inputs.callback_url }}
         run: python test_spark/get_fmkorea_pages.py --pages "${{ inputs.pages }}" --output result.json
-
-      - name: Upload JSON result
-        uses: actions/upload-artifact@v4
-        with:
-          name: fmkorea-list
-          path: result.json
-          if-no-files-found: error
-          retention-days: 1

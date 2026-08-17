@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+import requests
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -36,6 +39,12 @@ BLOCK_MARKERS = (
     "too many requests",
     "just a moment",
 )
+
+
+def send_callback(url: str, payload: dict[str, object]) -> None:
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    response = requests.post(url, data=body, headers={"Content-Type": "application/json"}, timeout=30)
+    response.raise_for_status()
 
 
 @dataclass(frozen=True)
@@ -264,9 +273,22 @@ def main() -> int:
         help="페이지 사이 최대 대기 초(기본값: 8)",
     )
     parser.add_argument("-o", "--output", type=Path, help="JSON 저장 경로")
+    parser.add_argument(
+        "--callback-url",
+        default=os.environ.get("FMKOREA_CALLBACK_URL"),
+        help="Completed crawl callback URL",
+    )
     args = parser.parse_args()
-
-    posts = fetch_pages(args.pages, args.min_delay, args.max_delay)
+    try:
+        posts = fetch_pages(args.pages, args.min_delay, args.max_delay)
+    except Exception as error:
+        if args.callback_url:
+            try:
+                send_callback(args.callback_url, {"success": False, "error": str(error)})
+            except requests.RequestException as callback_error:
+                print(f"Callback failed: {callback_error}")
+        print(f"FMKorea list crawl failed: {error}")
+        return 1
     output = args.output or (
         Path(__file__).resolve().parent.parent
         / "result"
@@ -283,6 +305,8 @@ def main() -> int:
         temporary_output.replace(output)
     finally:
         temporary_output.unlink(missing_ok=True)
+    if args.callback_url:
+        send_callback(args.callback_url, {"success": True, "result": json.loads(output.read_text(encoding="utf-8"))})
     print(f"총 {len(posts)}개 게시글을 저장했습니다: {output}")
     return 0
 
