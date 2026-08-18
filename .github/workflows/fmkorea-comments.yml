@@ -1,14 +1,10 @@
-name: Crawl FMKorea comments callback
+name: Crawl FMKorea comments artifact
 
 on:
   workflow_dispatch:
     inputs:
       post_id:
         description: "FMKorea post number"
-        required: true
-        type: string
-      callback_url:
-        description: "Callback URL for the completed crawl"
         required: true
         type: string
 
@@ -33,6 +29,12 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Crawl comments
-        env:
-          FMKOREA_CALLBACK_URL: ${{ inputs.callback_url }}
         run: python test_spark/get_fmkorea_comments.py --post-id "${{ inputs.post_id }}" --output result.json
+
+      - name: Upload JSON result
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmkorea-comments-${{ inputs.post_id }}
+          path: result.json
+          if-no-files-found: error
+          retention-days: 1
