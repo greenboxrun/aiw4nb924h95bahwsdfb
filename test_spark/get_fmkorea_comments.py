@@ -69,6 +69,15 @@ def parse_number(value: str | None) -> int:
     return int(match.group(0).replace(",", "")) if match else 0
 
 
+def parse_comment_content(item: Any) -> str:
+    content_node = item.select_one(".comment-content .xe_content")
+    if content_node is None:
+        return ""
+    for parent_link in content_node.select("a.findParent"):
+        parent_link.decompose()
+    return normalize_text(content_node.get_text(" ", strip=True))
+
+
 def parse_view_count(html: str) -> int:
     """Parse the post view count from the first-page HTML."""
     soup = BeautifulSoup(html, "html.parser")
@@ -123,15 +132,12 @@ def parse_comment_page(html: str, post_url: str) -> tuple[list[dict[str, Any]], 
         comment_id = parse_comment_id(item.get("id"))
         if comment_id is None:
             continue
-        content = normalize_text(
-            (item.select_one(".comment-content .xe_content") or {}).get_text(" ", strip=True)
-            if item.select_one(".comment-content .xe_content") else ""
-        )
+        parent_link = item.select_one(".comment-content a.findParent")
+        parent_id = parse_comment_id(parent_link.get("href") if parent_link else None)
+        content = parse_comment_content(item)
         is_deleted = content in {"삭제된 댓글입니다.", "[삭제된 댓글입니다.]"} or bool(
             re.fullmatch(r"deleted comment", content, re.IGNORECASE)
         )
-        parent_link = item.select_one(".comment-content a.findParent")
-        parent_id = parse_comment_id(parent_link.get("href") if parent_link else None)
         clipboard = item.select_one("a[data-clipboard-text*='#comment_']")
         raw_comment_url = clipboard.get("data-clipboard-text") if clipboard else None
         comment_url = raw_comment_url or f"{post_url}#comment_{comment_id}"
