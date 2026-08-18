@@ -41,6 +41,7 @@ BLOCK_MARKERS = (
     "sign in",
     "log in",
 )
+POST_NOT_FOUND_MARKER = "해당 문서가 존재하지 않습니다."
 
 
 class CrawlError(RuntimeError):
@@ -77,8 +78,14 @@ def is_blocked_html(html: str) -> bool:
     return any(marker in visible for marker in BLOCK_MARKERS)
 
 
+def is_post_not_found_html(html: str) -> bool:
+    return POST_NOT_FOUND_MARKER in html
+
+
 def parse_comment_page(html: str, post_url: str) -> tuple[list[dict[str, Any]], int]:
     soup = BeautifulSoup(html, "html.parser")
+    if is_post_not_found_html(html):
+        return [], 1
     wrapper = soup.select_one(".fdb_lst_wrp")
     if wrapper is None:
         if is_blocked_html(html):
@@ -195,6 +202,7 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
     unique_comments: dict[int, dict[str, Any]] = {}
     post_title = ""
     post_body = ""
+    post_status = "ok"
 
     try:
         for page_number in range(1, MAX_PAGE + 1):
@@ -221,6 +229,8 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
             page_html = driver.page_source
             if page_number == 1:
                 post_title, post_body = parse_post_content(page_html)
+            if is_post_not_found_html(page_html):
+                post_status = "not_found"
             page_comments, total_pages = parse_comment_page(page_html, post_url)
             pages.append(
                 {
@@ -244,6 +254,7 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
     created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return {
         "schema_version": 1,
+        "status": post_status,
         "post_id": str(post_id),
         "post_url": post_url,
         "title": post_title,
