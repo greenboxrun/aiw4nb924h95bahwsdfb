@@ -23,6 +23,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 
 MAX_PAGE = 7
+VIEW_COUNT_LIMIT = 10_000
 MIN_DELAY_SECONDS = 5.0
 MAX_DELAY_SECONDS = 8.0
 PAGE_TIMEOUT_SECONDS = 45
@@ -66,6 +67,21 @@ def parse_comment_id(value: str | None) -> int | None:
 def parse_number(value: str | None) -> int:
     match = re.search(r"[+-]?\d[\d,]*", value or "")
     return int(match.group(0).replace(",", "")) if match else 0
+
+
+def parse_view_count(html: str) -> int:
+    """Parse the post view count from the first-page HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    selectors = (
+        ".readNum",
+        ".side.fr > span:nth-child(1) > b",
+    )
+    for selector in selectors:
+        for node in soup.select(selector):
+            text = normalize_text(node.get_text(" ", strip=True))
+            if re.search(r"\d", text):
+                return parse_number(text)
+    raise CrawlError("FMKorea view count was not found")
 
 
 def is_blocked_html(html: str) -> bool:
@@ -202,6 +218,7 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
     unique_comments: dict[int, dict[str, Any]] = {}
     post_title = ""
     post_body = ""
+    view_count: int | None = None
     post_status = "ok"
 
     try:
@@ -228,7 +245,25 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
 
             page_html = driver.page_source
             if page_number == 1:
+                if is_blocked_html(page_html):
+                    raise CrawlError("FMKorea access was blocked; no retry was attempted")
                 post_title, post_body = parse_post_content(page_html)
+                if not is_post_not_found_html(page_html):
+                    view_count = parse_view_count(page_html)
+                    if view_count <= VIEW_COUNT_LIMIT:
+                        pages.append(
+                            {
+                                "page_number": page_number,
+                                "url": url,
+                                "comment_count": 0,
+                                "comments": [],
+                            }
+                        )
+                        print(
+                            f"[selenium] view count {view_count:,} <= {VIEW_COUNT_LIMIT:,}; "
+                            "skipping comments"
+                        )
+                        break
             if is_post_not_found_html(page_html):
                 post_status = "not_found"
             page_comments, total_pages = parse_comment_page(page_html, post_url)
@@ -259,6 +294,7 @@ def fetch_comments(post_id: int) -> dict[str, Any]:
         "post_url": post_url,
         "title": post_title,
         "body": post_body,
+        "view_count": view_count,
         "pages_requested": MAX_PAGE,
         "pages_crawled": len(pages),
         "comment_count": len(unique_comments),
