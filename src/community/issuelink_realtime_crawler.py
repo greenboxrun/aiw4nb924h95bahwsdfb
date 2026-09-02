@@ -25,12 +25,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-runtime-seconds", type=int, default=270)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--headed", action="store_true", help="브라우저 창 표시")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("DEBUG", "INFO", "WARNING"),
+    )
     return parser.parse_args(argv)
 
 
-def configure_logging() -> None:
+def configure_logging(level: str) -> None:
+    numeric_level = getattr(logging, level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"지원하지 않는 로그 레벨입니다: {level}")
     logging.basicConfig(
-        level=logging.INFO,
+        level=numeric_level,
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
@@ -38,8 +46,8 @@ def configure_logging() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    configure_logging()
     args = parse_args(argv)
+    configure_logging(args.log_level)
     try:
         crawler = RealtimeCrawler(
             JsonRecordRepository(args.output),

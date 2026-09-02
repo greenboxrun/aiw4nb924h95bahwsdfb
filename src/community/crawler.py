@@ -136,7 +136,17 @@ class RealtimeCrawler:
 
                     original_url = redirects.resolve(candidate.issue_link)
                     if original_url is None:
+                        self._logger.info(
+                            "Location 없음, Playwright fallback 시작: %s",
+                            candidate.issue_link,
+                        )
+                        original_url = listings.resolve_redirect(candidate.issue_link)
+                    if original_url is None:
                         stats.request_failures += 1
+                        self._logger.warning(
+                            "원문 주소 확보 실패, 건너뜀: %s",
+                            candidate.issue_link,
+                        )
                         continue
 
                     records.append(candidate.to_record(original_url))

@@ -59,10 +59,11 @@ jobs:
           RETENTION_HOURS: ${{ inputs.retention_hours || '48' }}
         run: >-
           timeout --signal=KILL --preserve-status 270s
-          python -m src.community.issuelink_realtime_crawler
+          python -u -m src.community.issuelink_realtime_crawler
           --max-new-posts "$MAX_NEW_POSTS"
           --max-pages "$MAX_PAGES"
           --retention-hours "$RETENTION_HOURS"
+          --log-level DEBUG
 
       - name: Commit result
         if: always()

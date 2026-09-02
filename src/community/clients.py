@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import APIRequestContext, Page, sync_playwright
 
 from .models import ListingCandidate
 from .parsing import (
@@ -78,6 +78,45 @@ class IssueLinkListingClient:
                     resource.close() if resource is not self._playwright else resource.stop()
                 except Exception as error:  # pragma: no cover - cleanup best effort
                     self._logger.warning("브라우저 리소스 종료 실패: %s", error)
+
+    def resolve_redirect(self, issue_link: str) -> str | None:
+        """Resolve a redirect with a browser-like request without following it."""
+        if self._context is None:
+            raise RuntimeError("listing client is not open")
+        self._deadline.ensure_available()
+        request: APIRequestContext = self._context.request
+        try:
+            response = request.get(
+                issue_link,
+                timeout=self._deadline.timeout_milliseconds(20),
+                max_redirects=0,
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "ko-KR,ko;q=0.9",
+                    "Referer": ISSUELINK_ORIGIN + "/",
+                },
+            )
+            location = response.headers.get("location", "").strip()
+            self._logger.debug(
+                "Playwright fallback 응답: url=%s status=%s location=%s "
+                "content_type=%s server=%s body_bytes=%s headers=%s",
+                issue_link,
+                response.status,
+                location or "<없음>",
+                response.headers.get("content-type", "<없음>"),
+                response.headers.get("server", "<없음>"),
+                len(response.body()),
+                _diagnostic_headers(response.headers),
+            )
+            return urljoin(issue_link, location) if location else None
+        except Exception as error:
+            self._logger.warning(
+                "Playwright fallback 요청 실패: %s (%s: %s)",
+                issue_link,
+                type(error).__name__,
+                error,
+            )
+            return None
 
     @staticmethod
     def _route_unneeded_resources(route: Any) -> None:
@@ -178,10 +217,22 @@ class IssueLinkRedirectClient:
                     allow_redirects=False,
                 )
                 location = response.headers.get("Location", "").strip()
+                self._logger.debug(
+                    "requests 응답: url=%s attempt=%s status=%s location=%s "
+                    "final_url=%s content_type=%s server=%s body_bytes=%s "
+                    "history=%s headers=%s",
+                    issue_link,
+                    attempt + 1,
+                    response.status_code,
+                    location or "<없음>",
+                    response.url,
+                    response.headers.get("Content-Type", "<없음>"),
+                    response.headers.get("Server", "<없음>"),
+                    len(response.content),
+                    [item.status_code for item in response.history],
+                    _diagnostic_headers(response.headers),
+                )
                 if not location:
-                    self._logger.warning(
-                        "원문 주소 없음, 건너뜀: %s (Location 헤더 없음)", issue_link
-                    )
                     return None
                 return urljoin(issue_link, location)
             except requests.RequestException as error:
@@ -201,3 +252,19 @@ class IssueLinkRedirectClient:
                 )
                 self._deadline.sleep(delay)
         return None
+
+
+def _diagnostic_headers(headers: Any) -> dict[str, str]:
+    """Keep useful response headers while excluding cookies and auth values."""
+    names = (
+        "location",
+        "content-type",
+        "server",
+        "via",
+        "x-cache",
+        "x-cache-hits",
+        "cf-cache-status",
+        "retry-after",
+    )
+    lowered = {str(key).lower(): str(value) for key, value in headers.items()}
+    return {name: lowered[name] for name in names if name in lowered}
