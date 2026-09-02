@@ -8,13 +8,13 @@ import random
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
-from .models import CrawlStats, ListingCandidate
-from .parsing import parse_integer, parse_written_at, record_key, remove_expired
+from .models import CrawlStats
+from .parsing import remove_expired
+from .record_policy import build_indexes, deduplicate, limit_to_target, update_existing
 from .repository import JsonRecordRepository
 from .timing import CrawlDeadlineExceeded, Deadline
 
@@ -59,7 +59,7 @@ class RealtimeCrawler:
         started = time.perf_counter()
         deadline = Deadline(self._config.max_runtime_seconds)
         records = self._repository.load()
-        retained = self._deduplicate_records(
+        retained = deduplicate(
             remove_expired(records, self._config.retention_hours)
         )
         removed = len(records) - len(retained)
@@ -67,14 +67,7 @@ class RealtimeCrawler:
         self._logger.info("기존 데이터: %s개, 만료 삭제: %s개", len(records), removed)
 
         stats = CrawlStats()
-        known_keys = {
-            key for record in retained if (key := record_key(record)) is not None
-        }
-        record_indexes = {
-            key: index
-            for index, record in enumerate(retained)
-            if (key := record_key(record)) is not None
-        }
+        known_keys, record_indexes = build_indexes(retained)
 
         try:
             with IssueLinkListingClient(
@@ -97,7 +90,7 @@ class RealtimeCrawler:
                     self._config.max_runtime_seconds,
                 )
         finally:
-            self._limit_to_target(records=retained)
+            limit_to_target(retained, self._config.target_total_posts)
             self._repository.save(retained)
             self._push_checkpoint(retained, stats.saved)
 
@@ -144,8 +137,8 @@ class RealtimeCrawler:
             stop_at_target=False,
         )
 
-        self._limit_to_target(records=records)
-        known_keys, record_indexes = self._build_record_indexes(records)
+        limit_to_target(records, self._config.target_total_posts)
+        known_keys, record_indexes = build_indexes(records)
         self._repository.save(records)
         self._logger.info(
             "필수 목록 1~%s페이지 처리 후 JSON %s개",
@@ -198,7 +191,7 @@ class RealtimeCrawler:
                     if candidate.key in known_keys:
                         stats.duplicates += 1
                         existing = records[record_indexes[candidate.key]]
-                        if self._update_existing(existing, candidate):
+                        if update_existing(existing, candidate):
                             stats.updated += 1
                             page_changed = True
                         continue
@@ -247,61 +240,6 @@ class RealtimeCrawler:
             if stop_at_target and len(records) >= self._config.target_total_posts:
                 break
             deadline.sleep(random.uniform(0.7, 1.2))
-
-    def _limit_to_target(self, *, records: list[dict[str, Any]]) -> None:
-        """Keep the highest-view records, with newer posts winning view-count ties."""
-        records.sort(key=self._record_sort_key)
-        del records[self._config.target_total_posts :]
-
-    @staticmethod
-    def _record_sort_key(record: dict[str, Any]) -> tuple[int, int, str, str]:
-        written_at = parse_written_at(str(record.get("작성시간", "")))
-        written_sort_value = RealtimeCrawler._datetime_sort_value(written_at)
-        return (
-            -parse_integer(str(record.get("조회수", ""))),
-            -written_sort_value,
-            str(record.get("사이트", "")),
-            str(record.get("id값", "")),
-        )
-
-    @staticmethod
-    def _datetime_sort_value(value: datetime | None) -> int:
-        if value is None:
-            return 0
-        return (
-            value.toordinal() * 86_400
-            + value.hour * 3_600
-            + value.minute * 60
-            + value.second
-        )
-
-    @staticmethod
-    def _deduplicate_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Keep the last stored copy for each source-site/post-ID pair."""
-        unique_records: list[dict[str, Any]] = []
-        record_indexes: dict[tuple[str, str], int] = {}
-        for record in records:
-            key = record_key(record)
-            if key is None:
-                unique_records.append(record)
-                continue
-            if key in record_indexes:
-                unique_records[record_indexes[key]] = record
-                continue
-            record_indexes[key] = len(unique_records)
-            unique_records.append(record)
-        return unique_records
-
-    @staticmethod
-    def _build_record_indexes(
-        records: list[dict[str, Any]],
-    ) -> tuple[set[tuple[str, str]], dict[tuple[str, str], int]]:
-        indexes = {
-            key: index
-            for index, record in enumerate(records)
-            if (key := record_key(record)) is not None
-        }
-        return set(indexes), indexes
 
     def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
         """Push a saved checkpoint when running inside GitHub Actions."""
@@ -356,18 +294,3 @@ class RealtimeCrawler:
                 if attempt < 2:
                     time.sleep(2 * (attempt + 1))
         raise RuntimeError(f"checkpoint push 실패: {last_error}")
-
-    @staticmethod
-    def _update_existing(record: dict[str, Any], candidate: ListingCandidate) -> bool:
-        changed = False
-        values = {
-            "제목": candidate.title,
-            "작성시간": candidate.written_at,
-            "댓글수": candidate.comment_count,
-            "조회수": candidate.view_count,
-        }
-        for field, value in values.items():
-            if record.get(field) != value:
-                record[field] = value
-                changed = True
-        return changed
