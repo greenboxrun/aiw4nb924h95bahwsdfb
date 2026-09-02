@@ -5,11 +5,10 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from playwright.sync_api import APIRequestContext, Error as PlaywrightError, Page, sync_playwright
 
@@ -21,6 +20,13 @@ from .parsing import (
     parse_title_and_comments,
 )
 from .timing import Deadline
+from .response_policy import (
+    detect_challenge,
+    diagnostic_headers,
+    extract_redirect_url,
+    is_issuelink_go_url,
+    set_cookie_names,
+)
 
 
 LIST_URL = (
@@ -219,9 +225,9 @@ class IssueLinkListingClient:
                 body = response.body()
                 body_text = body.decode("utf-8", errors="replace")
                 location = headers.get("location", "").strip()
-                challenge = _detect_challenge(body_text, headers)
+                challenge = detect_challenge(body_text, headers)
                 elapsed = time.perf_counter() - started
-                set_cookie_names = _set_cookie_names(headers.get("set-cookie", ""))
+                cookie_names = set_cookie_names(headers.get("set-cookie", ""))
                 self._logger.debug(
                     "원문 요청 응답: transport=playwright_api url=%s attempt=%s/%s "
                     "status=%s location=%s challenge=%s body_bytes=%s elapsed=%.2fs "
@@ -235,8 +241,8 @@ class IssueLinkListingClient:
                     len(body),
                     elapsed,
                     self._deadline.remaining,
-                    _diagnostic_headers(headers),
-                    set_cookie_names,
+                    diagnostic_headers(headers),
+                    cookie_names,
                 )
 
                 if challenge:
@@ -282,7 +288,7 @@ class IssueLinkListingClient:
                     )
 
                 resolved = extract_redirect_url(issue_link, headers, body_text)
-                if resolved and not _is_issuelink_go_url(resolved):
+                if resolved and not is_issuelink_go_url(resolved):
                     return RedirectResult(
                         resolved,
                         challenge_count,
@@ -415,83 +421,9 @@ class IssueLinkListingClient:
             len(body),
             hashlib.sha256(body).hexdigest(),
             preview,
-            _diagnostic_headers(headers),
-            _set_cookie_names(headers.get("set-cookie", "")),
+            diagnostic_headers(headers),
+            set_cookie_names(headers.get("set-cookie", "")),
             self._cookie_metadata(),
             self._has_cupid_cookie(),
             self._deadline.remaining,
         )
-
-
-def extract_redirect_url(
-    response_url: str,
-    headers: dict[str, str],
-    body: str,
-) -> str | None:
-    """Extract a redirect target without following it to the source site."""
-    location = headers.get("location", "").strip()
-    if location:
-        return urljoin(response_url, location)
-
-    refresh = headers.get("refresh", "")
-    refresh_match = re.search(r"(?:^|;)\s*url\s*=\s*([^;]+)", refresh, re.IGNORECASE)
-    if refresh_match:
-        return urljoin(response_url, refresh_match.group(1).strip(" '\""))
-
-    patterns = (
-        r"<meta[^>]+http-equiv\s*=\s*['\"]?refresh['\"]?[^>]+content\s*=\s*['\"][^'\"]*url\s*=\s*([^'\"]+)",
-        r"(?:window\.)?location(?:\.href|\.replace|\.assign)?\s*\(?'?\s*['\"]([^'\"]+)['\"]",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, body, re.IGNORECASE)
-        if match:
-            return urljoin(response_url, match.group(1).strip())
-    return None
-
-
-def _detect_challenge(body: str, headers: dict[str, str] | None = None) -> str | None:
-    lowered = body.lower()
-    markers = ("cupid.js", "slowaes.decrypt", 'document.cookie="cupid=', "cupid=")
-    header_text = ""
-    if headers:
-        header_text = " ".join(
-            f"{key}:{value}" for key, value in headers.items()
-        ).lower()
-    return "cupid" if any(marker in lowered for marker in markers) or "cupid" in header_text else None
-
-
-def _is_issuelink_go_url(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.netloc.lower().endswith("issuelink.co.kr") and parsed.path.startswith(
-        "/community/go/"
-    )
-
-
-def _set_cookie_names(header: str) -> list[str]:
-    if not header:
-        return []
-    return sorted(
-        set(
-            re.findall(
-                r"(?:^|,\s*)([!#$%&'*+\-.^_`|~0-9A-Za-z]+)=",
-                header,
-            )
-        )
-    )
-
-
-def _diagnostic_headers(headers: Any) -> dict[str, str]:
-    """Keep useful response headers while excluding cookies and auth values."""
-    names = (
-        "location",
-        "refresh",
-        "content-type",
-        "server",
-        "via",
-        "x-cache",
-        "x-cache-hits",
-        "cf-cache-status",
-        "retry-after",
-    )
-    lowered = {str(key).lower(): str(value) for key, value in headers.items()}
-    return {name: lowered[name] for name in names if name in lowered}
