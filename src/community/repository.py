@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from typing import Any
+
+from src.common.files import atomic_write_text
 
 
 class JsonRecordRepository:
@@ -26,18 +27,7 @@ class JsonRecordRepository:
         return [row for row in payload if isinstance(row, dict)]
 
     def save(self, records: list[dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_name(f".{self.path.name}.tmp")
-        temporary.write_text(
+        atomic_write_text(
+            self.path,
             json.dumps(records, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
         )
-        last_error: PermissionError | None = None
-        for attempt in range(10):
-            try:
-                temporary.replace(self.path)
-                return
-            except PermissionError as error:
-                last_error = error
-                time.sleep(0.25 * (attempt + 1))
-        raise last_error or PermissionError(f"출력 파일 교체 실패: {self.path}")

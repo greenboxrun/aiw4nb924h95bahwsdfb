@@ -21,6 +21,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 from src.common.paths import RESULT_ROOT
+from src.common.files import atomic_write_text
 
 from .get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
 
@@ -186,9 +187,10 @@ def write_json(
         "posts": [asdict(post) for post in posts],
     }
 
-    with output.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, ensure_ascii=False, indent=2)
-        file.write("\n")
+    atomic_write_text(
+        output,
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    )
 
 
 def fetch_pages(
@@ -275,17 +277,7 @@ def main() -> int:
         print(f"FMKorea list crawl failed: {error}")
         return 1
     output = args.output or (RESULT_ROOT / "topic" / "result.json")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temporary_output = output.with_name(f".{output.name}.tmp")
-    try:
-        write_json(
-            posts,
-            temporary_output,
-            page_count=args.pages,
-        )
-        temporary_output.replace(output)
-    finally:
-        temporary_output.unlink(missing_ok=True)
+    write_json(posts, output, page_count=args.pages)
     print(f"총 {len(posts)}개 게시글을 저장했습니다: {output}")
     return 0
 

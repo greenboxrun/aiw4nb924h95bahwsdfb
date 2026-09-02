@@ -21,6 +21,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
+from src.common.files import atomic_write_text
+
 
 MAX_PAGE = 7
 VIEW_COUNT_LIMIT = 10_000
@@ -318,13 +320,10 @@ def main() -> int:
     try:
         post_id = validate_post_id(args.post_id)
         payload = fetch_comments(post_id)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        temporary = args.output.with_name(f".{args.output.name}.tmp")
-        try:
-            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            temporary.replace(args.output)
-        finally:
-            temporary.unlink(missing_ok=True)
+        atomic_write_text(
+            args.output,
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        )
         print(f"saved {payload['comment_count']} comments to {args.output}")
         return 0
     except Exception as error:
