@@ -13,6 +13,8 @@ permissions:
 
 jobs:
   crawl:
+    # Disabled: community-crawl.yml is the only active crawler workflow.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
