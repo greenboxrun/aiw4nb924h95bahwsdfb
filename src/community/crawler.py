@@ -20,7 +20,7 @@ class CrawlerConfig:
     max_new_posts: int = 1000
     max_pages: int = 100
     retention_hours: int = 48
-    max_runtime_seconds: int = 270
+    max_runtime_seconds: float | None = None
     headed: bool = False
 
     def validate(self) -> None:
@@ -28,7 +28,7 @@ class CrawlerConfig:
             raise ValueError("max-new-posts와 max-pages는 1 이상이어야 합니다.")
         if self.retention_hours < 0:
             raise ValueError("retention-hours는 0 이상이어야 합니다.")
-        if self.max_runtime_seconds <= 0:
+        if self.max_runtime_seconds is not None and self.max_runtime_seconds <= 0:
             raise ValueError("max-runtime-seconds는 1 이상이어야 합니다.")
 
 
@@ -80,10 +80,11 @@ class RealtimeCrawler:
                     deadline,
                 )
         except CrawlDeadlineExceeded:
-            self._logger.warning(
-                "%s초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다.",
-                self._config.max_runtime_seconds,
-            )
+            if self._config.max_runtime_seconds is not None:
+                self._logger.warning(
+                    "%s초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다.",
+                    self._config.max_runtime_seconds,
+                )
 
         elapsed = time.perf_counter() - started
         self._logger.info(

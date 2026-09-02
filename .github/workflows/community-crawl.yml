@@ -2,8 +2,8 @@ name: Crawl community IssueLink posts
 
 on:
   schedule:
-    # UTC 00:00 and 18:00 = KST 09:00 and 03:00.
-    - cron: "0 0,18 * * *"
+    # Every 5 minutes (GitHub Actions cron uses UTC).
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       max_new_posts:
@@ -32,8 +32,8 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Leave time for cleanup and the always-run commit step after the crawl limit.
-    timeout-minutes: 10
+    # Final safety limit for the complete crawl job, including cleanup and commit.
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -58,12 +58,10 @@ jobs:
           MAX_PAGES: ${{ inputs.max_pages || '100' }}
           RETENTION_HOURS: ${{ inputs.retention_hours || '48' }}
         run: >-
-          timeout --signal=TERM --kill-after=30s --preserve-status 300s
           python -u -m src.community.issuelink_realtime_crawler
           --max-new-posts "$MAX_NEW_POSTS"
           --max-pages "$MAX_PAGES"
           --retention-hours "$RETENTION_HOURS"
-          --max-runtime-seconds 270
           --log-level DEBUG
 
       - name: Commit result

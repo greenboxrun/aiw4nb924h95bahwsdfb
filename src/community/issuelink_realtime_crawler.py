@@ -22,7 +22,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-new-posts", type=int, default=1000)
     parser.add_argument("--max-pages", type=int, default=100)
     parser.add_argument("--retention-hours", type=int, default=48)
-    parser.add_argument("--max-runtime-seconds", type=int, default=270)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--headed", action="store_true", help="브라우저 창 표시")
     parser.add_argument(
@@ -55,7 +54,6 @@ def main(argv: list[str] | None = None) -> int:
                 max_new_posts=args.max_new_posts,
                 max_pages=args.max_pages,
                 retention_hours=args.retention_hours,
-                max_runtime_seconds=args.max_runtime_seconds,
                 headed=args.headed,
             ),
             LOGGER,

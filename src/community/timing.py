@@ -12,10 +12,14 @@ class CrawlDeadlineExceeded(RuntimeError):
 class Deadline:
     """Monotonic deadline shared by browser and HTTP operations."""
 
-    def __init__(self, limit_seconds: float) -> None:
-        if limit_seconds <= 0:
+    def __init__(self, limit_seconds: float | None = None) -> None:
+        if limit_seconds is not None and limit_seconds <= 0:
             raise ValueError("limit_seconds must be greater than zero")
-        self._expires_at = time.monotonic() + limit_seconds
+        self._expires_at = (
+            time.monotonic() + limit_seconds
+            if limit_seconds is not None
+            else float("inf")
+        )
 
     @property
     def remaining(self) -> float:
