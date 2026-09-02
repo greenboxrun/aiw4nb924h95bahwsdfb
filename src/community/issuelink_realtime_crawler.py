@@ -24,9 +24,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="target_total_posts",
         type=int,
         default=1000,
-        help="기존 데이터 포함 최종 목표 게시물 수",
+        help="최종 보관 최대 게시물 수",
     )
-    parser.add_argument("--max-pages", type=int, default=100)
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=15,
+        help="최대 목록 페이지 수(필수 10페이지 포함, 10 이상)",
+    )
     parser.add_argument("--retention-hours", type=int, default=48)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--headed", action="store_true", help="브라우저 창 표시")

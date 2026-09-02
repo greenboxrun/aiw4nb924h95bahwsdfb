@@ -8,30 +8,33 @@ import random
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
 from .models import CrawlStats, ListingCandidate
-from .parsing import record_key, remove_expired
+from .parsing import parse_integer, parse_written_at, record_key, remove_expired
 from .repository import JsonRecordRepository
 from .timing import CrawlDeadlineExceeded, Deadline
-
-
-CHECKPOINT_SIZE = 100
 
 
 @dataclass(frozen=True, slots=True)
 class CrawlerConfig:
     target_total_posts: int = 1000
-    max_pages: int = 100
+    initial_pages: int = 10
+    max_pages: int = 15
     retention_hours: int = 48
     max_runtime_seconds: float | None = None
     headed: bool = False
 
     def validate(self) -> None:
-        if self.target_total_posts < 1 or self.max_pages < 1:
-            raise ValueError("max-new-posts와 max-pages는 1 이상이어야 합니다.")
+        if self.target_total_posts < 1:
+            raise ValueError("max-new-posts는 1 이상이어야 합니다.")
+        if self.initial_pages != 10:
+            raise ValueError("initial-pages는 반드시 10이어야 합니다.")
+        if self.max_pages < self.initial_pages:
+            raise ValueError("max-pages는 initial-pages(10) 이상이어야 합니다.")
         if self.retention_hours < 0:
             raise ValueError("retention-hours는 0 이상이어야 합니다.")
         if self.max_runtime_seconds is not None and self.max_runtime_seconds <= 0:
@@ -56,7 +59,9 @@ class RealtimeCrawler:
         started = time.perf_counter()
         deadline = Deadline(self._config.max_runtime_seconds)
         records = self._repository.load()
-        retained = remove_expired(records, self._config.retention_hours)
+        retained = self._deduplicate_records(
+            remove_expired(records, self._config.retention_hours)
+        )
         removed = len(records) - len(retained)
         self._repository.save(retained)
         self._logger.info("기존 데이터: %s개, 만료 삭제: %s개", len(records), removed)
@@ -91,6 +96,10 @@ class RealtimeCrawler:
                     "%s초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다.",
                     self._config.max_runtime_seconds,
                 )
+        finally:
+            self._limit_to_target(records=retained)
+            self._repository.save(retained)
+            self._push_checkpoint(retained, stats.saved)
 
         elapsed = time.perf_counter() - started
         self._logger.info(
@@ -123,7 +132,56 @@ class RealtimeCrawler:
         stats: CrawlStats,
         deadline: Deadline,
     ) -> None:
-        for page_number in range(1, self._config.max_pages + 1):
+        self._crawl_page_range(
+            listings,
+            records,
+            known_keys,
+            record_indexes,
+            stats,
+            deadline,
+            start_page=1,
+            end_page=self._config.initial_pages,
+            stop_at_target=False,
+        )
+
+        self._limit_to_target(records=records)
+        known_keys, record_indexes = self._build_record_indexes(records)
+        self._repository.save(records)
+        self._logger.info(
+            "필수 목록 1~%s페이지 처리 후 JSON %s개",
+            self._config.initial_pages,
+            len(records),
+        )
+
+        if len(records) >= self._config.target_total_posts:
+            return
+
+        self._crawl_page_range(
+            listings,
+            records,
+            known_keys,
+            record_indexes,
+            stats,
+            deadline,
+            start_page=self._config.initial_pages + 1,
+            end_page=self._config.max_pages,
+            stop_at_target=True,
+        )
+
+    def _crawl_page_range(
+        self,
+        listings: IssueLinkListingClient,
+        records: list[dict[str, Any]],
+        known_keys: set[tuple[str, str]],
+        record_indexes: dict[tuple[str, str], int],
+        stats: CrawlStats,
+        deadline: Deadline,
+        *,
+        start_page: int,
+        end_page: int,
+        stop_at_target: bool,
+    ) -> None:
+        for page_number in range(start_page, end_page + 1):
             deadline.ensure_available()
             page_started = time.perf_counter()
             page_changed = False
@@ -145,7 +203,7 @@ class RealtimeCrawler:
                             page_changed = True
                         continue
 
-                    if len(records) >= self._config.target_total_posts:
+                    if stop_at_target and len(records) >= self._config.target_total_posts:
                         continue
 
                     redirect = listings.resolve_redirect(candidate.issue_link)
@@ -173,9 +231,6 @@ class RealtimeCrawler:
                         candidate.site,
                         candidate.post_id,
                     )
-                    if stats.saved % CHECKPOINT_SIZE == 0:
-                        self._repository.save(records)
-                        self._push_checkpoint(records, stats.saved)
                     deadline.sleep(random.uniform(0.5, 0.8))
             finally:
                 if page_changed:
@@ -184,18 +239,69 @@ class RealtimeCrawler:
             self._logger.info(
                 "목록 %s/%s: %s개, 신규 누적 %s개, %.1f초",
                 page_number,
-                self._config.max_pages,
+                end_page,
                 len(page.candidates),
                 stats.saved,
                 time.perf_counter() - page_started,
             )
-            if len(records) >= self._config.target_total_posts:
+            if stop_at_target and len(records) >= self._config.target_total_posts:
                 break
             deadline.sleep(random.uniform(0.7, 1.2))
 
-        if stats.saved % CHECKPOINT_SIZE:
-            self._repository.save(records)
-            self._push_checkpoint(records, stats.saved)
+    def _limit_to_target(self, *, records: list[dict[str, Any]]) -> None:
+        """Keep the highest-view records, with newer posts winning view-count ties."""
+        records.sort(key=self._record_sort_key)
+        del records[self._config.target_total_posts :]
+
+    @staticmethod
+    def _record_sort_key(record: dict[str, Any]) -> tuple[int, int, str, str]:
+        written_at = parse_written_at(str(record.get("작성시간", "")))
+        written_sort_value = RealtimeCrawler._datetime_sort_value(written_at)
+        return (
+            -parse_integer(str(record.get("조회수", ""))),
+            -written_sort_value,
+            str(record.get("사이트", "")),
+            str(record.get("id값", "")),
+        )
+
+    @staticmethod
+    def _datetime_sort_value(value: datetime | None) -> int:
+        if value is None:
+            return 0
+        return (
+            value.toordinal() * 86_400
+            + value.hour * 3_600
+            + value.minute * 60
+            + value.second
+        )
+
+    @staticmethod
+    def _deduplicate_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep the last stored copy for each source-site/post-ID pair."""
+        unique_records: list[dict[str, Any]] = []
+        record_indexes: dict[tuple[str, str], int] = {}
+        for record in records:
+            key = record_key(record)
+            if key is None:
+                unique_records.append(record)
+                continue
+            if key in record_indexes:
+                unique_records[record_indexes[key]] = record
+                continue
+            record_indexes[key] = len(unique_records)
+            unique_records.append(record)
+        return unique_records
+
+    @staticmethod
+    def _build_record_indexes(
+        records: list[dict[str, Any]],
+    ) -> tuple[set[tuple[str, str]], dict[tuple[str, str], int]]:
+        indexes = {
+            key: index
+            for index, record in enumerate(records)
+            if (key := record_key(record)) is not None
+        }
+        return set(indexes), indexes
 
     def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
         """Push a saved checkpoint when running inside GitHub Actions."""
