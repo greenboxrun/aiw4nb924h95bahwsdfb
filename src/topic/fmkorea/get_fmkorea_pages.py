@@ -1,4 +1,4 @@
-"""이슈링크 펨코 목록을 여러 페이지 수집하는 스파크."""
+"""이슈링크 펨코 목록을 여러 페이지 수집하는 운영 크롤러."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
+from src.common.paths import RESULT_ROOT
+
+from .get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
 
 
 BASE_URL = (
@@ -272,11 +274,7 @@ def main() -> int:
     except Exception as error:
         print(f"FMKorea list crawl failed: {error}")
         return 1
-    output = args.output or (
-        Path(__file__).resolve().parent.parent
-        / "result"
-        / "result.json"
-    )
+    output = args.output or (RESULT_ROOT / "topic" / "result.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary_output = output.with_name(f".{output.name}.tmp")
     try:

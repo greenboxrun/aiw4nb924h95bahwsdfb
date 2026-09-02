@@ -30,12 +30,12 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Crawl FMKorea list
-        run: python test_spark/get_fmkorea_pages.py --pages "${{ inputs.pages }}" --output result.json
+        run: python -m src.topic.fmkorea.get_fmkorea_pages --pages "${{ inputs.pages }}" --output result/topic/result.json
 
       - name: Upload JSON result
         uses: actions/upload-artifact@v4
         with:
           name: fmkorea-list
-          path: result.json
+          path: result/topic/result.json
           if-no-files-found: error
           retention-days: 1

@@ -27,17 +27,27 @@ jobs:
         with:
           python-version: "3.12"
 
+      - id: schedule_gate
+        name: Check scheduled job status
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          echo "enabled=$(python -m src.common.scheduled_jobs --job topic.fmkorea.posts)" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.enabled == 'true'
         run: python -m pip install -r requirements.txt
 
       - name: Crawl posts
-        run: python test_spark/get_fmkorea_pages.py
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.enabled == 'true'
+        run: python -m src.topic.fmkorea.get_fmkorea_pages
 
       - name: Commit result
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.enabled == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add result/result.json
+          git add result/topic/result.json
           if git diff --cached --quiet; then
             echo "No result changes to commit."
             exit 0

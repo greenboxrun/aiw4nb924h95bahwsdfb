@@ -1,4 +1,4 @@
-"""이슈링크에서 펨코 게시글 목록을 가져오는 스파크."""
+"""이슈링크에서 펨코 게시글 목록을 가져오는 운영 크롤러."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def main() -> int:
         "-o",
         "--output",
         type=Path,
-        help="CSV 저장 경로 (기본값: test_spark/log/yyyymmddhhmmss.csv)",
+        help="CSV 저장 경로 (기본값: src/topic/fmkorea/log/yyyymmddhhmmss.csv)",
     )
     args = parser.parse_args()
 
