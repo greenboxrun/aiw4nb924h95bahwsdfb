@@ -45,4 +45,8 @@ class CrawlStats:
     updated: int = 0
     duplicates: int = 0
     expired_skipped: int = 0
+    redirect_successes: int = 0
+    cupid_challenges: int = 0
+    clearance_refreshes: int = 0
+    network_errors: int = 0
     request_failures: int = 0

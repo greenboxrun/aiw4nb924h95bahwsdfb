@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from .clients import IssueLinkListingClient, IssueLinkRedirectClient
+from .clients import IssueLinkListingClient
 from .models import CrawlStats, ListingCandidate
 from .parsing import record_key, remove_expired
 from .repository import JsonRecordRepository
@@ -66,36 +66,41 @@ class RealtimeCrawler:
         }
 
         try:
-            with IssueLinkRedirectClient(deadline, self._logger) as redirects:
-                with IssueLinkListingClient(
+            with IssueLinkListingClient(
+                deadline,
+                self._logger,
+                headed=self._config.headed,
+            ) as listings:
+                self._crawl_pages(
+                    listings,
+                    retained,
+                    known_keys,
+                    record_indexes,
+                    stats,
                     deadline,
-                    self._logger,
-                    headed=self._config.headed,
-                ) as listings:
-                    self._crawl_pages(
-                        listings,
-                        redirects,
-                        retained,
-                        known_keys,
-                        record_indexes,
-                        stats,
-                        deadline,
-                    )
+                )
         except CrawlDeadlineExceeded:
             self._logger.warning(
-                "270초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다."
+                "%s초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다.",
+                self._config.max_runtime_seconds,
             )
 
         elapsed = time.perf_counter() - started
         self._logger.info(
             "완료: %.1f초, 목록 %s개, 신규 %s개, 갱신 %s개, 중복 %s개, "
-            "만료 스킵 %s개, 원문 주소 확보 실패 %s개, JSON 총 %s개",
+            "만료 스킵 %s개, 리다이렉트 성공 %s개, CUPID 챌린지 %s회, "
+            "쿠키 갱신 %s회, 네트워크 오류 %s회, 최종 실패(원문 주소 확보 실패) %s개, "
+            "JSON 총 %s개",
             elapsed,
             stats.listed,
             stats.saved,
             stats.updated,
             stats.duplicates,
             stats.expired_skipped,
+            stats.redirect_successes,
+            stats.cupid_challenges,
+            stats.clearance_refreshes,
+            stats.network_errors,
             stats.request_failures,
             len(retained),
         )
@@ -105,7 +110,6 @@ class RealtimeCrawler:
     def _crawl_pages(
         self,
         listings: IssueLinkListingClient,
-        redirects: IssueLinkRedirectClient,
         records: list[dict[str, Any]],
         known_keys: set[tuple[str, str]],
         record_indexes: dict[tuple[str, str], int],
@@ -134,8 +138,11 @@ class RealtimeCrawler:
                             page_changed = True
                         continue
 
-                    original_url = redirects.resolve(candidate.issue_link)
-                    if original_url is None:
+                    redirect = listings.resolve_redirect(candidate.issue_link)
+                    stats.cupid_challenges += redirect.challenge_count
+                    stats.clearance_refreshes += redirect.clearance_refreshes
+                    stats.network_errors += redirect.network_errors
+                    if redirect.original_url is None:
                         stats.request_failures += 1
                         self._logger.warning(
                             "원문 주소 확보 실패, 건너뜀: %s",
@@ -143,7 +150,8 @@ class RealtimeCrawler:
                         )
                         continue
 
-                    records.append(candidate.to_record(original_url))
+                    stats.redirect_successes += 1
+                    records.append(candidate.to_record(redirect.original_url))
                     known_keys.add(candidate.key)
                     record_indexes[candidate.key] = len(records) - 1
                     stats.saved += 1

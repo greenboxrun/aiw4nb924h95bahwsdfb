@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
-import requests
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import APIRequestContext, Error as PlaywrightError, Page, sync_playwright
 
 from .models import ListingCandidate
 from .parsing import (
@@ -33,7 +34,8 @@ USER_AGENT = (
     "Chrome/131.0.0.0 Safari/537.36"
 )
 BLOCKED_RESOURCE_TYPES = {"font", "image", "media", "stylesheet"}
-MAX_REDIRECT_ATTEMPTS = 3
+MAX_REDIRECT_ATTEMPTS = 2
+DIAGNOSTIC_BODY_BYTES = 2048
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,8 +44,16 @@ class ListingPage:
     expired_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class RedirectResult:
+    original_url: str | None
+    challenge_count: int = 0
+    clearance_refreshes: int = 0
+    network_errors: int = 0
+
+
 class IssueLinkListingClient:
-    """Read listing pages through one lightweight Playwright session."""
+    """Read listings and resolve redirects through one Playwright context."""
 
     def __init__(
         self,
@@ -59,6 +69,7 @@ class IssueLinkListingClient:
         self._browser = None
         self._context = None
         self._page: Page | None = None
+        self._clearance_refresh_used = False
 
     def __enter__(self) -> "IssueLinkListingClient":
         self._deadline.ensure_available()
@@ -95,6 +106,7 @@ class IssueLinkListingClient:
         if self._page is None:
             raise RuntimeError("listing client is not open")
         self._deadline.ensure_available()
+        started = time.perf_counter()
         page = self._page
         page.goto(
             self._page_url(page_number),
@@ -104,6 +116,11 @@ class IssueLinkListingClient:
         page.locator("table tr a[href*='/community/go/']").first.wait_for(
             state="visible",
             timeout=self._deadline.timeout_milliseconds(30),
+        )
+        self._log_browser_state(
+            "목록 로드",
+            page_number=page_number,
+            elapsed=time.perf_counter() - started,
         )
         raw_rows = page.locator("table tr").evaluate_all(
             """rows => rows.map(row => {
@@ -144,115 +161,283 @@ class IssueLinkListingClient:
             )
         return ListingPage(candidates=candidates, expired_count=expired_count)
 
+    def resolve_redirect(self, issue_link: str) -> RedirectResult:
+        """Resolve a source URL without loading the source site in a page."""
+        if self._context is None:
+            raise RuntimeError("listing client is not open")
 
-class IssueLinkRedirectClient:
-    """Resolve IssueLink redirects with HTTP only, never with a browser."""
+        challenge_count = 0
+        clearance_refreshes = 0
+        network_errors = 0
+        request: APIRequestContext = self._context.request
 
-    def __init__(self, deadline: Deadline, logger: logging.Logger) -> None:
-        self._deadline = deadline
-        self._logger = logger
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "User-Agent": USER_AGENT,
-                "Accept-Language": "ko-KR,ko;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Referer": ISSUELINK_ORIGIN + "/",
-            }
+        for attempt in range(1, MAX_REDIRECT_ATTEMPTS + 1):
+            self._deadline.ensure_available()
+            started = time.perf_counter()
+            try:
+                response = request.get(
+                    issue_link,
+                    timeout=self._deadline.timeout_milliseconds(20),
+                    max_redirects=0,
+                    headers={
+                        "Accept": (
+                            "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                            "*/*;q=0.8"
+                        ),
+                        "Accept-Language": "ko-KR,ko;q=0.9",
+                        "Referer": ISSUELINK_ORIGIN + "/",
+                    },
+                )
+            except PlaywrightError as error:
+                network_errors += 1
+                self._logger.warning(
+                    "원문 요청 네트워크 오류: transport=playwright_api url=%s "
+                    "attempt=%s/%s error=%s:%s elapsed=%.2fs remaining=%.1fs",
+                    issue_link,
+                    attempt,
+                    MAX_REDIRECT_ATTEMPTS,
+                    type(error).__name__,
+                    error,
+                    time.perf_counter() - started,
+                    self._deadline.remaining,
+                )
+                if attempt < MAX_REDIRECT_ATTEMPTS:
+                    self._deadline.sleep(random.uniform(0.7, 1.1))
+                    continue
+                return RedirectResult(
+                    None,
+                    challenge_count,
+                    clearance_refreshes,
+                    network_errors,
+                )
+
+            try:
+                headers = {
+                    str(key).lower(): str(value)
+                    for key, value in response.headers.items()
+                }
+                body = response.body()
+                body_text = body.decode("utf-8", errors="replace")
+                location = headers.get("location", "").strip()
+                challenge = _detect_challenge(body_text, headers)
+                elapsed = time.perf_counter() - started
+                set_cookie_names = _set_cookie_names(headers.get("set-cookie", ""))
+                self._logger.debug(
+                    "원문 요청 응답: transport=playwright_api url=%s attempt=%s/%s "
+                    "status=%s location=%s challenge=%s body_bytes=%s elapsed=%.2fs "
+                    "remaining=%.1fs headers=%s set_cookie_names=%s",
+                    issue_link,
+                    attempt,
+                    MAX_REDIRECT_ATTEMPTS,
+                    response.status,
+                    location or "<없음>",
+                    challenge or "none",
+                    len(body),
+                    elapsed,
+                    self._deadline.remaining,
+                    _diagnostic_headers(headers),
+                    set_cookie_names,
+                )
+
+                if challenge:
+                    challenge_count += 1
+                    self._log_failed_response(
+                        issue_link,
+                        attempt,
+                        response.status,
+                        headers,
+                        body,
+                        challenge,
+                    )
+                    if not self._clearance_refresh_used and attempt < MAX_REDIRECT_ATTEMPTS:
+                        self._clearance_refresh_used = True
+                        clearance_refreshes += 1
+                        try:
+                            self._refresh_clearance()
+                        except PlaywrightError as error:
+                            network_errors += 1
+                            self._logger.warning(
+                                "CUPID 쿠키 갱신 실패: error=%s:%s remaining=%.1fs",
+                                type(error).__name__,
+                                error,
+                                self._deadline.remaining,
+                            )
+                            return RedirectResult(
+                                None,
+                                challenge_count,
+                                clearance_refreshes,
+                                network_errors,
+                            )
+                        continue
+                    self._logger.warning(
+                        "CUPID 챌린지 재시도 중단: url=%s clearance_refresh=%s",
+                        issue_link,
+                        "already_used" if self._clearance_refresh_used else "unavailable",
+                    )
+                    return RedirectResult(
+                        None,
+                        challenge_count,
+                        clearance_refreshes,
+                        network_errors,
+                    )
+
+                resolved = extract_redirect_url(issue_link, headers, body_text)
+                if resolved and not _is_issuelink_go_url(resolved):
+                    return RedirectResult(
+                        resolved,
+                        challenge_count,
+                        clearance_refreshes,
+                        network_errors,
+                    )
+
+                self._log_failed_response(
+                    issue_link,
+                    attempt,
+                    response.status,
+                    headers,
+                    body,
+                    "none",
+                )
+                self._logger.warning(
+                    "원문 리다이렉트 없음, 재시도하지 않음: url=%s status=%s",
+                    issue_link,
+                    response.status,
+                )
+                return RedirectResult(
+                    None,
+                    challenge_count,
+                    clearance_refreshes,
+                    network_errors,
+                )
+            finally:
+                response.dispose()
+
+        return RedirectResult(
+            None,
+            challenge_count,
+            clearance_refreshes,
+            network_errors,
         )
 
-    def __enter__(self) -> "IssueLinkRedirectClient":
-        return self
+    def _refresh_clearance(self) -> None:
+        if self._page is None:
+            raise RuntimeError("listing client is not open")
+        before = self._cookie_metadata()
+        page = self._page
+        target_url = page.url if page.url.startswith(ISSUELINK_ORIGIN) else LIST_URL
+        started = time.perf_counter()
+        self._logger.warning(
+            "CUPID 쿠키 갱신 시작: url=%s cookies_before=%s remaining=%.1fs",
+            target_url,
+            before,
+            self._deadline.remaining,
+        )
+        page.goto(
+            target_url,
+            wait_until="domcontentloaded",
+            timeout=self._deadline.timeout_milliseconds(30),
+        )
+        page.locator("table tr a[href*='/community/go/']").first.wait_for(
+            state="visible",
+            timeout=self._deadline.timeout_milliseconds(30),
+        )
+        self._logger.warning(
+            "CUPID 쿠키 갱신 완료: url=%s elapsed=%.2fs cookies_after=%s "
+            "cupid_present=%s remaining=%.1fs",
+            page.url,
+            time.perf_counter() - started,
+            self._cookie_metadata(),
+            self._has_cupid_cookie(),
+            self._deadline.remaining,
+        )
 
-    def __exit__(self, *_: object) -> None:
-        self._session.close()
+    def _log_browser_state(self, event: str, *, page_number: int, elapsed: float) -> None:
+        if self._page is None:
+            return
+        self._logger.debug(
+            "%s: page=%s url=%s elapsed=%.2fs remaining=%.1fs "
+            "cookies=%s cupid_present=%s",
+            event,
+            page_number,
+            self._page.url,
+            elapsed,
+            self._deadline.remaining,
+            self._cookie_metadata(),
+            self._has_cupid_cookie(),
+        )
 
-    def resolve(self, issue_link: str) -> str | None:
-        for attempt in range(MAX_REDIRECT_ATTEMPTS):
-            self._deadline.ensure_available()
-            try:
-                timeout = (
-                    self._deadline.timeout_seconds(5),
-                    self._deadline.timeout_seconds(20),
-                )
-                response = self._session.get(
-                    issue_link,
-                    timeout=timeout,
-                    allow_redirects=False,
-                )
-                location = response.headers.get("Location", "").strip()
-                body_preview = " ".join(response.text[:500].split())
-                self._logger.debug(
-                    "requests 응답: url=%s attempt=%s status=%s location=%s "
-                    "refresh=%s final_url=%s content_type=%s server=%s "
-                    "body_bytes=%s body_preview=%r history=%s headers=%s",
-                    issue_link,
-                    attempt + 1,
-                    response.status_code,
-                    location or "<없음>",
-                    response.headers.get("Refresh", "<없음>"),
-                    response.url,
-                    response.headers.get("Content-Type", "<없음>"),
-                    response.headers.get("Server", "<없음>"),
-                    len(response.content),
-                    body_preview,
-                    [item.status_code for item in response.history],
-                    _diagnostic_headers(response.headers),
-                )
-                resolved = extract_redirect_url(response, location)
-                if resolved:
-                    return resolved
-                if attempt + 1 < MAX_REDIRECT_ATTEMPTS:
-                    delay = random.uniform(0.7, 1.1) * (attempt + 1)
-                    self._logger.warning(
-                        "Location/본문 redirect 없음, requests 재시도 %s/%s: %s "
-                        "(status=%s, body_bytes=%s, %.1f초 대기)",
-                        attempt + 1,
-                        MAX_REDIRECT_ATTEMPTS - 1,
-                        issue_link,
-                        response.status_code,
-                        len(response.content),
-                        delay,
-                    )
-                    self._deadline.sleep(delay)
-                    continue
-                self._logger.warning(
-                    "requests redirect 확인 실패, 건너뜀: %s (status=%s, body_bytes=%s)",
-                    issue_link,
-                    response.status_code,
-                    len(response.content),
-                )
-                return None
-            except requests.RequestException as error:
-                if attempt + 1 == MAX_REDIRECT_ATTEMPTS:
-                    self._logger.warning(
-                        "IssueLink 주소 요청 실패, 건너뜀: %s (%s)", issue_link, error
-                    )
-                    return None
-                delay = random.uniform(0.7, 1.1) * (2**attempt)
-                self._logger.warning(
-                    "IssueLink 주소 요청 재시도 %s/%s: %s (%s), %.1f초 대기",
-                    attempt + 1,
-                    MAX_REDIRECT_ATTEMPTS - 1,
-                    issue_link,
-                    error,
-                    delay,
-                )
-                self._deadline.sleep(delay)
-        return None
+    def _cookie_metadata(self) -> list[dict[str, object]]:
+        if self._context is None:
+            return []
+        now = time.time()
+        metadata = []
+        for cookie in self._context.cookies(ISSUELINK_ORIGIN):
+            expires = float(cookie.get("expires", -1))
+            metadata.append(
+                {
+                    "name": str(cookie.get("name", "")),
+                    "domain": str(cookie.get("domain", "")),
+                    "secure": bool(cookie.get("secure", False)),
+                    "session": expires <= 0,
+                    "expired": expires > 0 and expires <= now,
+                }
+            )
+        return metadata
+
+    def _has_cupid_cookie(self) -> bool:
+        return any(
+            str(cookie.get("name", "")).upper() == "CUPID"
+            for cookie in self._cookie_metadata()
+        )
+
+    def _log_failed_response(
+        self,
+        issue_link: str,
+        attempt: int,
+        status: int,
+        headers: dict[str, str],
+        body: bytes,
+        challenge: str,
+    ) -> None:
+        preview = " ".join(
+            body[:DIAGNOSTIC_BODY_BYTES].decode("utf-8", errors="replace").split()
+        )
+        self._logger.warning(
+            "원문 응답 진단: transport=playwright_api url=%s attempt=%s/%s "
+            "status=%s challenge=%s body_bytes=%s body_sha256=%s "
+            "body_preview=%r headers=%s set_cookie_names=%s cookies=%s "
+            "cupid_present=%s remaining=%.1fs",
+            issue_link,
+            attempt,
+            MAX_REDIRECT_ATTEMPTS,
+            status,
+            challenge,
+            len(body),
+            hashlib.sha256(body).hexdigest(),
+            preview,
+            _diagnostic_headers(headers),
+            _set_cookie_names(headers.get("set-cookie", "")),
+            self._cookie_metadata(),
+            self._has_cupid_cookie(),
+            self._deadline.remaining,
+        )
 
 
-def extract_redirect_url(response: requests.Response, location: str = "") -> str | None:
-    """Extract a redirect target from an HTTP response without following it."""
+def extract_redirect_url(
+    response_url: str,
+    headers: dict[str, str],
+    body: str,
+) -> str | None:
+    """Extract a redirect target without following it to the source site."""
+    location = headers.get("location", "").strip()
     if location:
-        return urljoin(response.url, location)
+        return urljoin(response_url, location)
 
-    refresh = response.headers.get("Refresh", "")
+    refresh = headers.get("refresh", "")
     refresh_match = re.search(r"(?:^|;)\s*url\s*=\s*([^;]+)", refresh, re.IGNORECASE)
     if refresh_match:
-        return urljoin(response.url, refresh_match.group(1).strip(" '\""))
+        return urljoin(response_url, refresh_match.group(1).strip(" '\""))
 
-    body = response.text
     patterns = (
         r"<meta[^>]+http-equiv\s*=\s*['\"]?refresh['\"]?[^>]+content\s*=\s*['\"][^'\"]*url\s*=\s*([^'\"]+)",
         r"(?:window\.)?location(?:\.href|\.replace|\.assign)?\s*\(?'?\s*['\"]([^'\"]+)['\"]",
@@ -260,14 +445,46 @@ def extract_redirect_url(response: requests.Response, location: str = "") -> str
     for pattern in patterns:
         match = re.search(pattern, body, re.IGNORECASE)
         if match:
-            return urljoin(response.url, match.group(1).strip())
+            return urljoin(response_url, match.group(1).strip())
     return None
+
+
+def _detect_challenge(body: str, headers: dict[str, str] | None = None) -> str | None:
+    lowered = body.lower()
+    markers = ("cupid.js", "slowaes.decrypt", 'document.cookie="cupid=', "cupid=")
+    header_text = ""
+    if headers:
+        header_text = " ".join(
+            f"{key}:{value}" for key, value in headers.items()
+        ).lower()
+    return "cupid" if any(marker in lowered for marker in markers) or "cupid" in header_text else None
+
+
+def _is_issuelink_go_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.netloc.lower().endswith("issuelink.co.kr") and parsed.path.startswith(
+        "/community/go/"
+    )
+
+
+def _set_cookie_names(header: str) -> list[str]:
+    if not header:
+        return []
+    return sorted(
+        set(
+            re.findall(
+                r"(?:^|,\s*)([!#$%&'*+\-.^_`|~0-9A-Za-z]+)=",
+                header,
+            )
+        )
+    )
 
 
 def _diagnostic_headers(headers: Any) -> dict[str, str]:
     """Keep useful response headers while excluding cookies and auth values."""
     names = (
         "location",
+        "refresh",
         "content-type",
         "server",
         "via",

@@ -32,7 +32,7 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Leave time for the always-run commit step after the 270-second crawl limit.
+    # Leave time for cleanup and the always-run commit step after the crawl limit.
     timeout-minutes: 10
 
     steps:
@@ -58,11 +58,12 @@ jobs:
           MAX_PAGES: ${{ inputs.max_pages || '100' }}
           RETENTION_HOURS: ${{ inputs.retention_hours || '48' }}
         run: >-
-          timeout --signal=KILL --preserve-status 270s
+          timeout --signal=TERM --kill-after=30s --preserve-status 300s
           python -u -m src.community.issuelink_realtime_crawler
           --max-new-posts "$MAX_NEW_POSTS"
           --max-pages "$MAX_PAGES"
           --retention-hours "$RETENTION_HOURS"
+          --max-runtime-seconds 270
           --log-level DEBUG
 
       - name: Commit result

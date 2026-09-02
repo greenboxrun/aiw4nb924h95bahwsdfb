@@ -1,3 +1,6 @@
 src/topic/fmkorea/log/
 __pycache__/
 github.env
+test_spark/log/
+test_spark/result/
+AGENTS.md
