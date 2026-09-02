@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
+import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
@@ -15,16 +18,19 @@ from .repository import JsonRecordRepository
 from .timing import CrawlDeadlineExceeded, Deadline
 
 
+CHECKPOINT_SIZE = 100
+
+
 @dataclass(frozen=True, slots=True)
 class CrawlerConfig:
-    max_new_posts: int = 1000
+    target_total_posts: int = 1000
     max_pages: int = 100
     retention_hours: int = 48
     max_runtime_seconds: float | None = None
     headed: bool = False
 
     def validate(self) -> None:
-        if self.max_new_posts < 1 or self.max_pages < 1:
+        if self.target_total_posts < 1 or self.max_pages < 1:
             raise ValueError("max-new-posts와 max-pages는 1 이상이어야 합니다.")
         if self.retention_hours < 0:
             raise ValueError("retention-hours는 0 이상이어야 합니다.")
@@ -139,6 +145,9 @@ class RealtimeCrawler:
                             page_changed = True
                         continue
 
+                    if len(records) >= self._config.target_total_posts:
+                        continue
+
                     redirect = listings.resolve_redirect(candidate.issue_link)
                     stats.cupid_challenges += redirect.challenge_count
                     stats.clearance_refreshes += redirect.clearance_refreshes
@@ -160,12 +169,13 @@ class RealtimeCrawler:
                     self._logger.info(
                         "저장 %s/%s: %s/%s",
                         stats.saved,
-                        self._config.max_new_posts,
+                        self._config.target_total_posts,
                         candidate.site,
                         candidate.post_id,
                     )
-                    if stats.saved >= self._config.max_new_posts:
-                        break
+                    if stats.saved % CHECKPOINT_SIZE == 0:
+                        self._repository.save(records)
+                        self._push_checkpoint(records, stats.saved)
                     deadline.sleep(random.uniform(0.5, 0.8))
             finally:
                 if page_changed:
@@ -179,9 +189,67 @@ class RealtimeCrawler:
                 stats.saved,
                 time.perf_counter() - page_started,
             )
-            if stats.saved >= self._config.max_new_posts:
+            if len(records) >= self._config.target_total_posts:
                 break
             deadline.sleep(random.uniform(0.7, 1.2))
+
+        if stats.saved % CHECKPOINT_SIZE:
+            self._repository.save(records)
+            self._push_checkpoint(records, stats.saved)
+
+    def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
+        """Push a saved checkpoint when running inside GitHub Actions."""
+        if os.environ.get("GITHUB_ACTIONS") != "true":
+            return
+
+        repository_path = self._repository.path.resolve()
+        project_root = Path(__file__).resolve().parents[2]
+        try:
+            relative_path = repository_path.relative_to(project_root)
+        except ValueError as error:
+            raise RuntimeError(
+                f"checkpoint 대상 파일이 저장소 밖에 있습니다: {repository_path}"
+            ) from error
+
+        def run_git(*arguments: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["git", *arguments],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        run_git("add", str(relative_path))
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+        )
+        if staged.returncode == 0:
+            return
+        if staged.returncode != 1:
+            raise RuntimeError(staged.stderr.strip() or "Git staged diff 확인 실패")
+
+        run_git("config", "user.name", "github-actions[bot]")
+        run_git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
+        run_git("commit", "-m", "Checkpoint community crawl result")
+        last_error = ""
+        for attempt in range(3):
+            try:
+                run_git("push")
+                self._logger.info(
+                    "checkpoint push 완료: 신규 %s개, 전체 %s개",
+                    saved_count,
+                    len(records),
+                )
+                return
+            except subprocess.CalledProcessError as error:
+                last_error = error.stderr.strip() or str(error)
+                if attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+        raise RuntimeError(f"checkpoint push 실패: {last_error}")
 
     @staticmethod
     def _update_existing(record: dict[str, Any], candidate: ListingCandidate) -> bool:

@@ -19,7 +19,13 @@ DEFAULT_OUTPUT = RESULT_ROOT / "community" / "result.json"
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="IssueLink 실시간 커뮤니티 JSON 누적 크롤러")
-    parser.add_argument("--max-new-posts", type=int, default=1000)
+    parser.add_argument(
+        "--max-new-posts",
+        dest="target_total_posts",
+        type=int,
+        default=1000,
+        help="기존 데이터 포함 최종 목표 게시물 수",
+    )
     parser.add_argument("--max-pages", type=int, default=100)
     parser.add_argument("--retention-hours", type=int, default=48)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -51,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         crawler = RealtimeCrawler(
             JsonRecordRepository(args.output),
             CrawlerConfig(
-                max_new_posts=args.max_new_posts,
+                target_total_posts=args.target_total_posts,
                 max_pages=args.max_pages,
                 retention_hours=args.retention_hours,
                 headed=args.headed,
