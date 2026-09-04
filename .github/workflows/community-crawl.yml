@@ -1,9 +1,6 @@
 name: Crawl community IssueLink posts
 
 on:
-  schedule:
-    # Every 5 minutes (GitHub Actions cron uses UTC).
-    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       max_new_posts:
@@ -81,3 +78,12 @@ jobs:
             git commit -m "Update community crawl result"
           fi
           git push
+
+      - name: Upload crawl result artifact
+        if: steps.crawl.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-crawl-result
+          path: result/community/result.json
+          if-no-files-found: error
+          retention-days: 2
