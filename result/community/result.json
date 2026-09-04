@@ -45,15 +45,6 @@
     "원문URL": "https://www.instiz.net/pt/7898357?page=1"
   },
   {
-    "사이트": "humoruniv",
-    "id값": "1423496",
-    "제목": "다이소에서 팔아주기를 원하는 제품들.jpg",
-    "작성시간": "2026-09-02 05:46:00",
-    "댓글수": 35,
-    "조회수": 44460,
-    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&pg=3&number=1423496"
-  },
-  {
     "사이트": "ppomppu",
     "id값": "468400010103586",
     "제목": "튜닝하고 돌아온  클라라 .jpg",
@@ -943,6 +934,15 @@
     "댓글수": 15,
     "조회수": 16091,
     "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423706"
+  },
+  {
+    "사이트": "humoruniv",
+    "id값": "1423779",
+    "제목": "은근 찐따 판별 잘하는 직업.jpg",
+    "작성시간": "2026-09-04 11:51:00",
+    "댓글수": 55,
+    "조회수": 16081,
+    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423779"
   },
   {
     "사이트": "instiz",
@@ -2223,6 +2223,15 @@
     "원문URL": "https://www.instiz.net/pt/7898735?page=1"
   },
   {
+    "사이트": "humoruniv",
+    "id값": "1423742",
+    "제목": "직접 기른 방울토마토를 먹는 특별한 방법.jpg",
+    "작성시간": "2026-09-04 06:20:00",
+    "댓글수": 13,
+    "조회수": 10936,
+    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423742"
+  },
+  {
     "사이트": "82cook",
     "id값": "4234565",
     "제목": "배다해가 결혼 참 잘했네요",
@@ -3031,15 +3040,6 @@
     "댓글수": 21,
     "조회수": 7983,
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722120?p=5&iskin=webzine"
-  },
-  {
-    "사이트": "mlbpark",
-    "id값": "118389216",
-    "제목": "미국여행 진짜 까다롭나",
-    "작성시간": "2026-09-02 05:46:31",
-    "댓글수": 29,
-    "조회수": 7936,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609020118389216&p=1021&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
   },
   {
     "사이트": "inven",
@@ -4383,6 +4383,15 @@
     "원문URL": "https://www.fmkorea.com/10291150859"
   },
   {
+    "사이트": "inven",
+    "id값": "2723108",
+    "제목": "ㅇㅎ?) 여장갤의 흔한 여장남자 수준..",
+    "작성시간": "2026-09-04 12:10:00",
+    "댓글수": 33,
+    "조회수": 5248,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723108?iskin=webzine"
+  },
+  {
     "사이트": "instiz",
     "id값": "7898647",
     "제목": "경복궁에서 인도네시아 전통의상 입은 인도네시아인",
@@ -4777,15 +4786,6 @@
     "댓글수": 16,
     "조회수": 4918,
     "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&page=803003&no=41737059"
-  },
-  {
-    "사이트": "ppomppu",
-    "id값": "468400010103137",
-    "제목": "마지막 불꽃을 다 태우고 떠나는  선수 영상",
-    "작성시간": "2026-09-02 05:57:37",
-    "댓글수": 0,
-    "조회수": 4912,
-    "원문URL": "https://www.ppomppu.co.kr/zboard/view.php?id=freeboard&no=10103137"
   },
   {
     "사이트": "inven",
@@ -5256,6 +5256,15 @@
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722305?p=2&iskin=webzine"
   },
   {
+    "사이트": "inven",
+    "id값": "2722977",
+    "제목": "여친이 너무 귀여워죽겠어요",
+    "작성시간": "2026-09-04 03:07:00",
+    "댓글수": 12,
+    "조회수": 4474,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722977?iskin=webzine"
+  },
+  {
     "사이트": "clien",
     "id값": "19257240",
     "제목": "흔한 FSD 회피 영상",
@@ -5544,6 +5553,15 @@
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722600?iskin=webzine"
   },
   {
+    "사이트": "inven",
+    "id값": "2723089",
+    "제목": "억지로 여유있는 척할 때 짓는 표정.",
+    "작성시간": "2026-09-04 11:26:00",
+    "댓글수": 27,
+    "조회수": 4187,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723089?iskin=webzine"
+  },
+  {
     "사이트": "ppomppu",
     "id값": "468400010104037",
     "제목": "고딩들 지하철 부비부비",
@@ -5776,6 +5794,15 @@
     "댓글수": 19,
     "조회수": 3970,
     "원문URL": "https://www.clien.net/service/board/park/19257815?od=T31&po=0&category=0&groupCd=board_all"
+  },
+  {
+    "사이트": "inven",
+    "id값": "2723094",
+    "제목": "한국이 생활 난이도 최하라고 말하는 사람",
+    "작성시간": "2026-09-04 11:49:00",
+    "댓글수": 28,
+    "조회수": 3969,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723094?iskin=webzine"
   },
   {
     "사이트": "fmkorea",
@@ -6210,6 +6237,15 @@
     "원문URL": "https://www.fmkorea.com/10290422973"
   },
   {
+    "사이트": "inven",
+    "id값": "2722780",
+    "제목": "남다른 성적 취향을 가진 츠자..",
+    "작성시간": "2026-09-03 16:32:00",
+    "댓글수": 19,
+    "조회수": 3493,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722780?iskin=webzine"
+  },
+  {
     "사이트": "fmkorea",
     "id값": "10294298031",
     "제목": "성수동 좆망... 고액 팝업스토어에 밀려 떠나.jpg",
@@ -6253,15 +6289,6 @@
     "댓글수": 11,
     "조회수": 3420,
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722748?iskin=webzine"
-  },
-  {
-    "사이트": "ruliweb",
-    "id값": "76523823",
-    "제목": "인간의 본성이 악하다는 증거",
-    "작성시간": "2026-09-02 05:51:00",
-    "댓글수": 17,
-    "조회수": 3414,
-    "원문URL": "https://bbs.ruliweb.com/community/board/300143/read/76523823"
   },
   {
     "사이트": "todayhumor",
@@ -7027,15 +7054,6 @@
     "댓글수": 39,
     "조회수": 2622,
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%9D%B4%EB%AA%85%EB%B0%95-34%EB%85%B8%EB%AC%B4%ED%98%84%EC%9D%98-%EB%B9%84%EA%B7%B9%EC%9D%80-%EB%82%B4-%ED%83%93-%EC%95%84%EB%8B%88%EB%8B%A434-jpg-9309519"
-  },
-  {
-    "사이트": "etoland",
-    "id값": "9307083",
-    "제목": "가천대 입시 설명회 근황",
-    "작성시간": "2026-09-02 05:50:00",
-    "댓글수": 2,
-    "조회수": 2618,
-    "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EA%B0%80%EC%B2%9C%EB%8C%80-%EC%9E%85%EC%8B%9C-%EC%84%A4%EB%AA%85%ED%9A%8C-%EA%B7%BC%ED%99%A9-9307083?page=7"
   },
   {
     "사이트": "todayhumor",
@@ -8100,15 +8118,6 @@
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%9A%94%EC%A6%98-%EB%AF%B8%EA%B5%AD-%EB%A1%AF%EB%8D%B0%EB%A6%AC%EC%95%84-%EA%B7%BC%ED%99%A9-jpg-9310904"
   },
   {
-    "사이트": "todayhumor",
-    "id값": "15625033",
-    "제목": "[베스트펌] 속보) 삼성 갤럭시 울트라 급나누기정책 폐지",
-    "작성시간": "2026-09-02 06:01:00",
-    "댓글수": 0,
-    "조회수": 1886,
-    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059209&s_no=15625033&kind=total&page=4"
-  },
-  {
     "사이트": "slr",
     "id값": "41739037",
     "제목": "블핑 리사, 까이는 중 ㄷㄷ",
@@ -8829,6 +8838,15 @@
     "원문URL": "https://www.ppomppu.co.kr/zboard/view.php?id=freeboard&page=1&divpage=1888&no=10105186"
   },
   {
+    "사이트": "ruliweb",
+    "id값": "38734756",
+    "제목": "또 해외쳐나감 ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ",
+    "작성시간": "2026-09-04 11:28:00",
+    "댓글수": 12,
+    "조회수": 1521,
+    "원문URL": "https://bbs.ruliweb.com/community/board/300148/read/38734756"
+  },
+  {
     "사이트": "slr",
     "id값": "41738105",
     "제목": "치폴레 한국 상륙.jpg",
@@ -8980,23 +8998,5 @@
     "댓글수": 0,
     "조회수": 1386,
     "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059318&s_no=15625265&kind=total&page=1"
-  },
-  {
-    "사이트": "etoland",
-    "id값": "9309363",
-    "제목": "실제 교도소에 신입이 들어올때 나누는 대화",
-    "작성시간": "2026-09-03 03:30:00",
-    "댓글수": 2,
-    "조회수": 1385,
-    "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%8B%A4%EC%A0%9C-%EA%B5%90%EB%8F%84%EC%86%8C%EC%97%90-%EC%8B%A0%EC%9E%85%EC%9D%B4-%EB%93%A4%EC%96%B4%EC%98%AC%EB%95%8C-%EB%82%98%EB%88%84%EB%8A%94-%EB%8C%80%ED%99%94-9309363"
-  },
-  {
-    "사이트": "etoland",
-    "id값": "9311775",
-    "제목": "가장 비싼 사진들",
-    "작성시간": "2026-09-04 03:43:00",
-    "댓글수": 2,
-    "조회수": 1380,
-    "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EA%B0%80%EC%9E%A5-%EB%B9%84%EC%8B%BC-%EC%82%AC%EC%A7%84%EB%93%A4-9311775"
   }
 ]
