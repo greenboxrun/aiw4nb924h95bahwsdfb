@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
+
+
+# South Korea uses a fixed UTC+09:00 offset and does not observe DST.
+KST = timezone(timedelta(hours=9), "KST")
 
 
 def parse_identity(href: str) -> tuple[str, str] | None:
@@ -39,7 +43,7 @@ def parse_written_at(value: str) -> datetime | None:
     value = value.strip()
     for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y.%m.%d %H:%M"):
         try:
-            return datetime.strptime(value, pattern)
+            return datetime.strptime(value, pattern).replace(tzinfo=KST)
         except ValueError:
             continue
     return None
@@ -57,8 +61,14 @@ def is_expired(
     """Return whether a record is older than the configured retention period."""
     written_at = parse_written_at(str(record.get("작성시간", "")))
     if written_at is None:
-        return False
-    reference_time = now or datetime.now()
+        # Records without a recognized absolute timestamp cannot be proven to
+        # be within the KST retention window.
+        return True
+    reference_time = now or datetime.now(KST)
+    if reference_time.tzinfo is None:
+        reference_time = reference_time.replace(tzinfo=KST)
+    else:
+        reference_time = reference_time.astimezone(KST)
     return written_at < reference_time - timedelta(hours=retention_hours)
 
 

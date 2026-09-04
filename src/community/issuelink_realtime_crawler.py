@@ -29,7 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--max-pages",
         type=int,
-        default=15,
+        default=30,
         help="최대 목록 페이지 수(필수 10페이지 포함, 10 이상)",
     )
     parser.add_argument("--retention-hours", type=int, default=48)

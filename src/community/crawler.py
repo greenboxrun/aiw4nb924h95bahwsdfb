@@ -8,12 +8,13 @@ import random
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
 from .models import CrawlStats
-from .parsing import remove_expired
+from .parsing import KST, remove_expired
 from .record_policy import build_indexes, deduplicate, limit_to_target, update_existing
 from .repository import JsonRecordRepository
 from .timing import CrawlDeadlineExceeded, Deadline
@@ -23,7 +24,7 @@ from .timing import CrawlDeadlineExceeded, Deadline
 class CrawlerConfig:
     target_total_posts: int = 1000
     initial_pages: int = 10
-    max_pages: int = 15
+    max_pages: int = 30
     retention_hours: int = 48
     max_runtime_seconds: float | None = None
     headed: bool = False
@@ -58,9 +59,10 @@ class RealtimeCrawler:
     def run(self) -> CrawlStats:
         started = time.perf_counter()
         deadline = Deadline(self._config.max_runtime_seconds)
+        reference_time = datetime.now(KST)
         records = self._repository.load()
         retained = deduplicate(
-            remove_expired(records, self._config.retention_hours)
+            remove_expired(records, self._config.retention_hours, reference_time)
         )
         removed = len(records) - len(retained)
         self._repository.save(retained)
@@ -82,6 +84,7 @@ class RealtimeCrawler:
                     record_indexes,
                     stats,
                     deadline,
+                    reference_time,
                 )
         except CrawlDeadlineExceeded:
             if self._config.max_runtime_seconds is not None:
@@ -124,6 +127,7 @@ class RealtimeCrawler:
         record_indexes: dict[tuple[str, str], int],
         stats: CrawlStats,
         deadline: Deadline,
+        reference_time: datetime,
     ) -> None:
         self._crawl_page_range(
             listings,
@@ -135,6 +139,7 @@ class RealtimeCrawler:
             start_page=1,
             end_page=self._config.initial_pages,
             stop_at_target=False,
+            reference_time=reference_time,
         )
 
         limit_to_target(records, self._config.target_total_posts)
@@ -159,6 +164,7 @@ class RealtimeCrawler:
             start_page=self._config.initial_pages + 1,
             end_page=self._config.max_pages,
             stop_at_target=True,
+            reference_time=reference_time,
         )
 
     def _crawl_page_range(
@@ -173,12 +179,17 @@ class RealtimeCrawler:
         start_page: int,
         end_page: int,
         stop_at_target: bool,
+        reference_time: datetime,
     ) -> None:
         for page_number in range(start_page, end_page + 1):
             deadline.ensure_available()
             page_started = time.perf_counter()
             page_changed = False
-            page = listings.read_page(page_number, self._config.retention_hours)
+            page = listings.read_page(
+                page_number,
+                self._config.retention_hours,
+                reference_time,
+            )
             stats.expired_skipped += page.expired_count
             stats.listed += len(page.candidates) + page.expired_count
 

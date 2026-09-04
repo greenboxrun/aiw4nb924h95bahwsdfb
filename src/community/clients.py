@@ -7,6 +7,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin
 
@@ -108,7 +109,12 @@ class IssueLinkListingClient:
     def _page_url(page_number: int) -> str:
         return LIST_URL if page_number == 1 else f"{LIST_URL}/{page_number}"
 
-    def read_page(self, page_number: int, retention_hours: int) -> ListingPage:
+    def read_page(
+        self,
+        page_number: int,
+        retention_hours: int,
+        now: datetime | None = None,
+    ) -> ListingPage:
         if self._page is None:
             raise RuntimeError("listing client is not open")
         self._deadline.ensure_available()
@@ -146,7 +152,7 @@ class IssueLinkListingClient:
         for raw_row in raw_rows:
             href = str(raw_row.get("href", ""))
             date = str(raw_row.get("date", ""))
-            if is_expired({"작성시간": date}, retention_hours):
+            if is_expired({"작성시간": date}, retention_hours, now):
                 expired_count += 1
                 continue
             identity = parse_identity(href)

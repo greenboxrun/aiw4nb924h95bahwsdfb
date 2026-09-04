@@ -11,7 +11,7 @@ on:
       max_pages:
         description: "Maximum IssueLink pages to crawl (must be at least 10)"
         required: false
-        default: "15"
+        default: "30"
         type: string
       retention_hours:
         description: "Retention period in hours"
