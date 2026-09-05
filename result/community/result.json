@@ -325,15 +325,6 @@
   },
   {
     "사이트": "humoruniv",
-    "id값": "1423732",
-    "제목": "슈카월드 직원이 알려주는 현실적인 2030 내 집 마련 노하우",
-    "작성시간": "2026-09-04 00:43:00",
-    "댓글수": 52,
-    "조회수": 16177,
-    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423732"
-  },
-  {
-    "사이트": "humoruniv",
     "id값": "1423839",
     "제목": "여의도한강공원의 근황의 근황",
     "작성시간": "2026-09-04 20:25:00",
@@ -1081,6 +1072,15 @@
   },
   {
     "사이트": "humoruniv",
+    "id값": "1423911",
+    "제목": "헬창이 쳐다보는 이유.jpg",
+    "작성시간": "2026-09-05 14:51:00",
+    "댓글수": 13,
+    "조회수": 11614,
+    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423911"
+  },
+  {
+    "사이트": "humoruniv",
     "id값": "1423909",
     "제목": "벤치프레스 해야하는 이유",
     "작성시간": "2026-09-05 14:35:00",
@@ -1584,15 +1584,6 @@
     "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1423935"
   },
   {
-    "사이트": "clien",
-    "id값": "19258145",
-    "제목": "이재명 정부 1년 성과 알려드립니다",
-    "작성시간": "2026-09-04 00:38:56",
-    "댓글수": 108,
-    "조회수": 8207,
-    "원문URL": "https://www.clien.net/service/board/park/19258145?od=T31&po=0&category=0&groupCd=board_all"
-  },
-  {
     "사이트": "humoruniv",
     "id값": "1423932",
     "제목": "불문율을 박살내고 있다는 놋 Lㅔ리Uㅏ",
@@ -1625,7 +1616,7 @@
     "제목": "불법주차 신고로 과태료 폭탄 맞은 경주 황성동",
     "작성시간": "2026-09-05 07:22:00",
     "댓글수": 15,
-    "조회수": 7984,
+    "조회수": 7998,
     "원문URL": "https://www.bobaedream.co.kr/view?code=accident&No=859471&bm=1"
   },
   {
@@ -1672,6 +1663,15 @@
     "댓글수": 25,
     "조회수": 7326,
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2722973?iskin=webzine"
+  },
+  {
+    "사이트": "inven",
+    "id값": "2723683",
+    "제목": "ㅇㅎ) 서안누나",
+    "작성시간": "2026-09-05 21:22:00",
+    "댓글수": 16,
+    "조회수": 7237,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723683?iskin=webzine"
   },
   {
     "사이트": "inven",
@@ -1737,13 +1737,13 @@
     "원문URL": "https://www.fmkorea.com/10298887693"
   },
   {
-    "사이트": "inven",
-    "id값": "2723683",
-    "제목": "ㅇㅎ) 서안누나",
-    "작성시간": "2026-09-05 21:22:00",
-    "댓글수": 16,
-    "조회수": 6794,
-    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723683?iskin=webzine"
+    "사이트": "fmkorea",
+    "id값": "10301565929",
+    "제목": "존나 못생긴 과기대 학생.JPG",
+    "작성시간": "2026-09-05 23:49:00",
+    "댓글수": 21,
+    "조회수": 6964,
+    "원문URL": "https://www.fmkorea.com/10301565929"
   },
   {
     "사이트": "ppomppu",
@@ -1852,6 +1852,15 @@
     "댓글수": 14,
     "조회수": 6333,
     "원문URL": "https://www.instiz.net/pt/7899122?page=1"
+  },
+  {
+    "사이트": "inven",
+    "id값": "2723681",
+    "제목": "ㅎㅂ)오늘밤 투나잇!",
+    "작성시간": "2026-09-05 21:17:00",
+    "댓글수": 16,
+    "조회수": 6291,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723681?iskin=webzine"
   },
   {
     "사이트": "instiz",
@@ -1987,15 +1996,6 @@
     "댓글수": 11,
     "조회수": 6010,
     "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723109?iskin=webzine"
-  },
-  {
-    "사이트": "inven",
-    "id값": "2723681",
-    "제목": "ㅎㅂ)오늘밤 투나잇!",
-    "작성시간": "2026-09-05 21:17:00",
-    "댓글수": 16,
-    "조회수": 5967,
-    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2723681?iskin=webzine"
   },
   {
     "사이트": "inven",
@@ -2239,15 +2239,6 @@
     "댓글수": 1,
     "조회수": 5313,
     "원문URL": "https://www.clien.net/service/board/park/19258161?od=T31&po=0&category=0&groupCd=board_all"
-  },
-  {
-    "사이트": "fmkorea",
-    "id값": "10293938305",
-    "제목": "동네 철봉 내구성 논란 jpg",
-    "작성시간": "2026-09-04 00:50:00",
-    "댓글수": 24,
-    "조회수": 5292,
-    "원문URL": "https://www.fmkorea.com/10293938305"
   },
   {
     "사이트": "inven",
@@ -3249,6 +3240,15 @@
     "원문URL": "https://www.82cook.com/entiz/read.php?bn=15&num=4235614&page=1"
   },
   {
+    "사이트": "ppomppu",
+    "id값": "468400010107267",
+    "제목": "컬리 진짜 미쳤나봐여",
+    "작성시간": "2026-09-05 22:33:57",
+    "댓글수": 38,
+    "조회수": 3752,
+    "원문URL": "https://www.ppomppu.co.kr/zboard/view.php?id=freeboard&page=1&divpage=1888&no=10107267"
+  },
+  {
     "사이트": "inven",
     "id값": "2722997",
     "제목": "ㅇㅎ 정열의 브라질",
@@ -3265,15 +3265,6 @@
     "댓글수": 5,
     "조회수": 3733,
     "원문URL": "https://www.clien.net/service/board/park/19258448?od=T31&po=0&category=0&groupCd=board_all"
-  },
-  {
-    "사이트": "etoland",
-    "id값": "9311591",
-    "제목": "청첩장 파쇄글 뒷내용",
-    "작성시간": "2026-09-04 00:44:00",
-    "댓글수": 14,
-    "조회수": 3720,
-    "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%B2%AD%EC%B2%A9%EC%9E%A5-%ED%8C%8C%EC%87%84%EA%B8%80-%EB%92%B7%EB%82%B4%EC%9A%A9-9311591"
   },
   {
     "사이트": "clien",
@@ -4608,6 +4599,15 @@
     "원문URL": "https://bbs.ruliweb.com/community/board/300148/read/38736537"
   },
   {
+    "사이트": "82cook",
+    "id값": "4235882",
+    "제목": "올해 불꽃축제 실망스러워요",
+    "작성시간": "2026-09-05 21:48:18",
+    "댓글수": 5,
+    "조회수": 2553,
+    "원문URL": "https://www.82cook.com/entiz/read.php?bn=15&num=4235882&page=1"
+  },
+  {
     "사이트": "fmkorea",
     "id값": "10294204222",
     "제목": "미국 반도체 망햇나요?",
@@ -5616,6 +5616,15 @@
     "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41738833"
   },
   {
+    "사이트": "slr",
+    "id값": "41740315",
+    "제목": "요즘 현대 기아차 가격이 미쳐가는 이유",
+    "작성시간": "2026-09-05 22:13:13",
+    "댓글수": 31,
+    "조회수": 1857,
+    "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41740315"
+  },
+  {
     "사이트": "82cook",
     "id값": "4235399",
     "제목": "헬마, 오창석이사 뇌 지진 오겠네요 ㅋ",
@@ -6480,15 +6489,6 @@
     "원문URL": "https://bbs.ruliweb.com/community/board/300143/read/76551722"
   },
   {
-    "사이트": "fmkorea",
-    "id값": "10293917969",
-    "제목": "무탠다드 옷 << 입을만한가..",
-    "작성시간": "2026-09-04 00:41:00",
-    "댓글수": 4,
-    "조회수": 1457,
-    "원문URL": "https://www.fmkorea.com/10293917969"
-  },
-  {
     "사이트": "bobae",
     "id값": "6985693",
     "제목": "민주당의 역사를 조롱으로 만들어 버린 종자들",
@@ -7119,6 +7119,15 @@
     "원문URL": "https://www.ppomppu.co.kr/zboard/view.php?id=freeboard&page=1&divpage=1888&no=10105584"
   },
   {
+    "사이트": "todayhumor",
+    "id값": "15625527",
+    "제목": "낚시와 주식으로 하루를 보내는 70대 노부부",
+    "작성시간": "2026-09-05 20:55:00",
+    "댓글수": 0,
+    "조회수": 1118,
+    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059434&s_no=15625527&kind=total&page=1"
+  },
+  {
     "사이트": "slr",
     "id값": "41739541",
     "제목": "도요타 신형 SUV 출시",
@@ -7200,15 +7209,6 @@
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609050118471101&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
   },
   {
-    "사이트": "todayhumor",
-    "id값": "15625527",
-    "제목": "낚시와 주식으로 하루를 보내는 70대 노부부",
-    "작성시간": "2026-09-05 20:55:00",
-    "댓글수": 0,
-    "조회수": 1057,
-    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059434&s_no=15625527&kind=total&page=1"
-  },
-  {
     "사이트": "etoland",
     "id값": "9312588",
     "제목": "하영 쏘아올린 글 올린 사람 근황.jpg",
@@ -7261,6 +7261,15 @@
     "댓글수": 8,
     "조회수": 1030,
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%B6%9C%EA%B7%BC-%EC%B2%AB%EB%82%A0-%EC%A7%A4%EB%A6%B4%EB%BB%94%ED%95%9C-%EC%97%90%EC%8A%A4%ED%85%8C%ED%8B%B1-%EC%A7%81%EC%9B%90-gif-9401273"
+  },
+  {
+    "사이트": "bobae",
+    "id값": "6985916",
+    "제목": "ㅇㅎ) 비밀친구 만들려고 들어갔다가 밤샜습니다...",
+    "작성시간": "2026-09-05 22:25:00",
+    "댓글수": 1,
+    "조회수": 1027,
+    "원문URL": "https://www.bobaedream.co.kr/view?code=strange&No=6985916&bm=1"
   },
   {
     "사이트": "mlbpark",
@@ -7486,6 +7495,15 @@
     "댓글수": 12,
     "조회수": 972,
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609050118472817&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
+  },
+  {
+    "사이트": "theqoo",
+    "id값": "4336554481",
+    "제목": "?? 과도한 관심과 사랑 자제 부탁드립니다 ??",
+    "작성시간": "2026-09-05 22:10:00",
+    "댓글수": 2,
+    "조회수": 971,
+    "원문URL": "https://theqoo.net/square/4336554481"
   },
   {
     "사이트": "theqoo",
@@ -7866,6 +7884,15 @@
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609050118470945&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
   },
   {
+    "사이트": "todayhumor",
+    "id값": "15625521",
+    "제목": "현직 경찰이 말하는 제압하기 어려웠던 직종 top 3",
+    "작성시간": "2026-09-05 20:43:00",
+    "댓글수": 8,
+    "조회수": 913,
+    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059432&s_no=15625521&kind=total&page=1"
+  },
+  {
     "사이트": "theqoo",
     "id값": "4335710157",
     "제목": "핑계고 누적 조회수 12억뷰 돌파",
@@ -8134,15 +8161,6 @@
     "댓글수": 12,
     "조회수": 880,
     "원문URL": "https://theqoo.net/square/4335280520"
-  },
-  {
-    "사이트": "todayhumor",
-    "id값": "15625521",
-    "제목": "현직 경찰이 말하는 제압하기 어려웠던 직종 top 3",
-    "작성시간": "2026-09-05 20:43:00",
-    "댓글수": 8,
-    "조회수": 879,
-    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059432&s_no=15625521&kind=total&page=1"
   },
   {
     "사이트": "mlbpark",
@@ -8458,15 +8476,6 @@
     "댓글수": 7,
     "조회수": 799,
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609040118447428&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
-    "사이트": "bobae",
-    "id값": "6985916",
-    "제목": "ㅇㅎ) 비밀친구 만들려고 들어갔다가 밤샜습니다...",
-    "작성시간": "2026-09-05 22:25:00",
-    "댓글수": 1,
-    "조회수": 798,
-    "원문URL": "https://www.bobaedream.co.kr/view?code=strange&No=6985916&bm=1"
   },
   {
     "사이트": "mlbpark",
@@ -8989,14 +8998,5 @@
     "댓글수": 3,
     "조회수": 253,
     "원문URL": "https://www.fmkorea.com/10295846112"
-  },
-  {
-    "사이트": "fmkorea",
-    "id값": "10295798620",
-    "제목": "조셉트 29cm에서 사라졌어",
-    "작성시간": "2026-09-04 16:41:00",
-    "댓글수": 18,
-    "조회수": 222,
-    "원문URL": "https://www.fmkorea.com/10295798620"
   }
 ]
