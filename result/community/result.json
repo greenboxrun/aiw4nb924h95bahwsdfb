@@ -36,15 +36,6 @@
     "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1424242"
   },
   {
-    "사이트": "instiz",
-    "id값": "7899877",
-    "제목": "??요즘 토스가 사활걸고 미는 페이스페이 증언..JPG",
-    "작성시간": "2026-09-06 13:09:00",
-    "댓글수": 83,
-    "조회수": 22190,
-    "원문URL": "https://www.instiz.net/pt/7899877?page=1"
-  },
-  {
     "사이트": "humoruniv",
     "id값": "1424252",
     "제목": "조롱 아니고 진짜 순수하게 궁금함 청년.jpg",
@@ -1459,15 +1450,6 @@
   },
   {
     "사이트": "humoruniv",
-    "id값": "1424037",
-    "제목": "산모의 장기가 손상되면 뱃속의 아기가 하는 행동.jpg",
-    "작성시간": "2026-09-06 13:24:00",
-    "댓글수": 36,
-    "조회수": 10244,
-    "원문URL": "http://web.humoruniv.com/board/humor/read.html?table=pds&number=1424037"
-  },
-  {
-    "사이트": "humoruniv",
     "id값": "1424065",
     "제목": "죽음 앞에서도 의연했던 유부남의 마지막 메시지.jpg",
     "작성시간": "2026-09-06 16:56:00",
@@ -1719,6 +1701,15 @@
     "원문URL": "https://www.fmkorea.com/10306430027"
   },
   {
+    "사이트": "bobae",
+    "id값": "100000859539",
+    "제목": "대형마트 주차장 사고 분심위 결과까지.. 조언 부탁드립니다.",
+    "작성시간": "2026-09-07 12:26:00",
+    "댓글수": 48,
+    "조회수": 8087,
+    "원문URL": "https://www.bobaedream.co.kr/view?code=accident&No=859539"
+  },
+  {
     "사이트": "fmkorea",
     "id값": "10303844199",
     "제목": "주가 80% 폭락한 나이키 근황 ㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷㄷ. jpg",
@@ -1726,15 +1717,6 @@
     "댓글수": 21,
     "조회수": 8085,
     "원문URL": "https://www.fmkorea.com/10303844199"
-  },
-  {
-    "사이트": "bobae",
-    "id값": "100000859539",
-    "제목": "대형마트 주차장 사고 분심위 결과까지.. 조언 부탁드립니다.",
-    "작성시간": "2026-09-07 12:26:00",
-    "댓글수": 48,
-    "조회수": 8072,
-    "원문URL": "https://www.bobaedream.co.kr/view?code=accident&No=859539"
   },
   {
     "사이트": "instiz",
@@ -2313,6 +2295,15 @@
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609070118529760&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
   },
   {
+    "사이트": "fmkorea",
+    "id값": "10310600606",
+    "제목": "요새 30대 얼굴이 급속도로 젊어진",
+    "작성시간": "2026-09-08 11:51:00",
+    "댓글수": 7,
+    "조회수": 5720,
+    "원문URL": "https://www.fmkorea.com/10310600606"
+  },
+  {
     "사이트": "inven",
     "id값": "2724646",
     "제목": "여수 섬 박람회 근황",
@@ -2743,6 +2734,15 @@
     "댓글수": 11,
     "조회수": 5024,
     "원문URL": "https://www.fmkorea.com/10305957043"
+  },
+  {
+    "사이트": "inven",
+    "id값": "2724709",
+    "제목": "ㅇㅎ?) 외국의 돈까스",
+    "작성시간": "2026-09-08 09:31:00",
+    "댓글수": 15,
+    "조회수": 5019,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2724709?iskin=webzine"
   },
   {
     "사이트": "clien",
@@ -3294,6 +3294,15 @@
     "원문URL": "https://www.fmkorea.com/10307376327"
   },
   {
+    "사이트": "inven",
+    "id값": "2724715",
+    "제목": "하이닉스 180층 구조대 도착",
+    "작성시간": "2026-09-08 09:54:00",
+    "댓글수": 39,
+    "조회수": 4310,
+    "원문URL": "https://www.inven.co.kr/board/webzine/2097/2724715?iskin=webzine"
+  },
+  {
     "사이트": "fmkorea",
     "id값": "10309029552",
     "제목": "ㅇㅎ?) 엄청난 기술을 가진 센세",
@@ -3580,6 +3589,15 @@
     "댓글수": 9,
     "조회수": 4003,
     "원문URL": "https://www.fmkorea.com/10306680575"
+  },
+  {
+    "사이트": "clien",
+    "id값": "19260142",
+    "제목": "타이레놀은 자폐의 원인일까요?",
+    "작성시간": "2026-09-08 10:31:28",
+    "댓글수": 20,
+    "조회수": 3999,
+    "원문URL": "https://www.clien.net/service/board/park/19260142?od=T31&po=0&category=0&groupCd=board_all"
   },
   {
     "사이트": "ppomppu",
@@ -5886,15 +5904,6 @@
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%9A%B4%EB%8F%99-1%EB%8F%84%EC%95%88%ED%95%9C-%EC%97%AC%EC%84%B1%EC%97%90-%ED%8C%94%EB%9A%9D-%E3%84%B7%E3%84%B7-9412093"
   },
   {
-    "사이트": "ruliweb",
-    "id값": "76574051",
-    "제목": "우리 애가 5표 밖에 못 받았는데… 반장이 됐다고요?.jpg",
-    "작성시간": "2026-09-06 13:09:00",
-    "댓글수": 17,
-    "조회수": 1827,
-    "원문URL": "https://bbs.ruliweb.com/community/board/300143/read/76574051"
-  },
-  {
     "사이트": "slr",
     "id값": "41740794",
     "제목": "현기차 내부 분위기",
@@ -6201,6 +6210,15 @@
     "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41742106"
   },
   {
+    "사이트": "82cook",
+    "id값": "4236731",
+    "제목": "장원영,오늘은 사진까지 잘 나옴 ㄷㄷ",
+    "작성시간": "2026-09-08 10:03:11",
+    "댓글수": 10,
+    "조회수": 1695,
+    "원문URL": "https://www.82cook.com/entiz/read.php?bn=15&num=4236731&page=1"
+  },
+  {
     "사이트": "ruliweb",
     "id값": "76575854",
     "제목": "불꽃축제 끝난 여의도 글은 조작",
@@ -6388,6 +6406,15 @@
     "댓글수": 20,
     "조회수": 1591,
     "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41741878"
+  },
+  {
+    "사이트": "ppomppu",
+    "id값": "468400010109636",
+    "제목": "쿠팡에서 주문하면 안되는 품목.jpg",
+    "작성시간": "2026-09-08 11:01:15",
+    "댓글수": 9,
+    "조회수": 1579,
+    "원문URL": "https://www.ppomppu.co.kr/zboard/view.php?id=freeboard&page=1&divpage=1889&no=10109636"
   },
   {
     "사이트": "etoland",
@@ -6966,15 +6993,6 @@
     "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41740879"
   },
   {
-    "사이트": "slr",
-    "id값": "41740701",
-    "제목": "인도 직장생활 20대 ㅊㅈ가 알려주는 문화충격",
-    "작성시간": "2026-09-06 13:25:47",
-    "댓글수": 14,
-    "조회수": 1288,
-    "원문URL": "http://www.slrclub.com/bbs/vx2.php?id=free&no=41740701"
-  },
-  {
     "사이트": "etoland",
     "id값": "9411827",
     "제목": "여행 계획 짜다가 살짝 ㅈ된 상황",
@@ -7255,6 +7273,15 @@
   },
   {
     "사이트": "todayhumor",
+    "id값": "15625800",
+    "제목": "좋은 사람들의 대화.jpg",
+    "작성시간": "2026-09-08 09:38:00",
+    "댓글수": 4,
+    "조회수": 1144,
+    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059562&s_no=15625800&kind=total&page=1"
+  },
+  {
+    "사이트": "todayhumor",
     "id값": "15625743",
     "제목": "미국 사막 한가운데서 먹는 한국인 아침식사",
     "작성시간": "2026-09-07 19:57:00",
@@ -7423,15 +7450,6 @@
     "댓글수": 12,
     "조회수": 1030,
     "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609060118508370&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
-    "사이트": "todayhumor",
-    "id값": "15625800",
-    "제목": "좋은 사람들의 대화.jpg",
-    "작성시간": "2026-09-08 09:38:00",
-    "댓글수": 4,
-    "조회수": 1019,
-    "원문URL": "http://www.todayhumor.co.kr/board/view.php?table=humordata&no=2059562&s_no=15625800&kind=total&page=1"
   },
   {
     "사이트": "mlbpark",
@@ -7666,6 +7684,15 @@
     "댓글수": 1,
     "조회수": 978,
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/%EC%A5%AC%EC%96%BC%EB%A6%AC-%EC%9D%B4%EC%A7%80%ED%98%84%EC%9D%B4-%EC%A7%80%EA%B8%88-%EB%B0%95%EC%A0%95%EC%95%84-%EB%B3%B4%EB%A9%B4%EC%84%9C-%EC%8B%A0%EA%B8%B0%ED%95%98%EB%8B%A4%EB%8A%94%EA%B1%B0-jpg-9411679"
+  },
+  {
+    "사이트": "theqoo",
+    "id값": "4338807293",
+    "제목": "당신은 너구리의 엉덩이를 볼 것입니다",
+    "작성시간": "2026-09-08 10:34:00",
+    "댓글수": 13,
+    "조회수": 977,
+    "원문URL": "https://theqoo.net/square/4338807293"
   },
   {
     "사이트": "theqoo",
@@ -8119,6 +8146,15 @@
   },
   {
     "사이트": "theqoo",
+    "id값": "4338797845",
+    "제목": "면접 개폐급 사건",
+    "작성시간": "2026-09-08 10:22:00",
+    "댓글수": 3,
+    "조회수": 914,
+    "원문URL": "https://theqoo.net/square/4338797845"
+  },
+  {
+    "사이트": "theqoo",
     "id값": "4338740197",
     "제목": "물류택배 기사아저씨가 허겁지겁 트럭에서 내리고 달려가셔서 무슨일인가했는데 고양이 쓰다듬으면서 밥을 주셨음ㅋㅋㅋ 그리고 나서 열심히 물건을 나르러 가셨다",
     "작성시간": "2026-09-08 09:01:00",
@@ -8161,6 +8197,15 @@
     "댓글수": 17,
     "조회수": 911,
     "원문URL": "https://theqoo.net/square/4337777390"
+  },
+  {
+    "사이트": "mlbpark",
+    "id값": "118545717",
+    "제목": "연예인 실물 후기 레전드.jpg",
+    "작성시간": "2026-09-08 10:34:33",
+    "댓글수": 9,
+    "조회수": 910,
+    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609080118545717&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
   },
   {
     "사이트": "theqoo",
@@ -8271,15 +8316,6 @@
     "원문URL": "https://www.etoland.co.kr/b/etohumor07/view/gpt-%EC%95%84%EC%8A%A4%ED%8A%B8%EB%9D%BC%EA%B0%80-50%EB%B6%84%EB%A7%8C%EC%97%90-%EB%A7%8C%EB%93%A0-%EA%B2%8C%EC%9E%84-jpg-9411667"
   },
   {
-    "사이트": "mlbpark",
-    "id값": "118507137",
-    "제목": "당근에서 본 황당한 구인알바",
-    "작성시간": "2026-09-06 13:20:45",
-    "댓글수": 4,
-    "조회수": 898,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609060118507137&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
     "사이트": "etoland",
     "id값": "9408214",
     "제목": "공무원 실수로 시아버지와 혼인신고 됨",
@@ -8359,6 +8395,24 @@
     "댓글수": 4,
     "조회수": 884,
     "원문URL": "https://theqoo.net/square/4337028431"
+  },
+  {
+    "사이트": "theqoo",
+    "id값": "4338835677",
+    "제목": "\"500억 위조상품권 들키자 영하 25도 냉동고에\"…파주 카페 업주 '계획살인' 무게",
+    "작성시간": "2026-09-08 11:07:00",
+    "댓글수": 8,
+    "조회수": 881,
+    "원문URL": "https://theqoo.net/square/4338835677"
+  },
+  {
+    "사이트": "theqoo",
+    "id값": "4338792683",
+    "제목": "정모도 했었던 그때 그 시절 얼짱",
+    "작성시간": "2026-09-08 10:15:00",
+    "댓글수": 8,
+    "조회수": 880,
+    "원문URL": "https://theqoo.net/square/4338792683"
   },
   {
     "사이트": "theqoo",
@@ -8944,59 +8998,5 @@
     "댓글수": 2,
     "조회수": 683,
     "원문URL": "https://theqoo.net/square/4337767580"
-  },
-  {
-    "사이트": "mlbpark",
-    "id값": "118510890",
-    "제목": "(혐) 레전드 충격적인 시구.gif",
-    "작성시간": "2026-09-06 17:13:35",
-    "댓글수": 5,
-    "조회수": 668,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609060118510890&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
-    "사이트": "theqoo",
-    "id값": "4338275473",
-    "제목": "단독콘서트로 100만관객 돌파한 임영웅이 7년 전 했던 말",
-    "작성시간": "2026-09-07 18:21:00",
-    "댓글수": 4,
-    "조회수": 665,
-    "원문URL": "https://theqoo.net/square/4338275473"
-  },
-  {
-    "사이트": "mlbpark",
-    "id값": "118520415",
-    "제목": "19) 초절정 극락 복상사 3P",
-    "작성시간": "2026-09-06 19:20:28",
-    "댓글수": 1,
-    "조회수": 663,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609060118520415&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
-    "사이트": "mlbpark",
-    "id값": "118540134",
-    "제목": "Chat-GPT6 놀라운 여자영상 수준.mp4",
-    "작성시간": "2026-09-07 20:18:42",
-    "댓글수": 4,
-    "조회수": 661,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609070118540134&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=naver.com"
-  },
-  {
-    "사이트": "mlbpark",
-    "id값": "118507914",
-    "제목": "현재 미국에서 난리난 사건.jpg",
-    "작성시간": "2026-09-06 14:19:29",
-    "댓글수": 10,
-    "조회수": 660,
-    "원문URL": "https://mlbpark.donga.com/mp/b.php?id=202609060118507914&p=1&b=bullpen&m=view&select=&query=&subselect=&subquery=&user=&site=donga.com"
-  },
-  {
-    "사이트": "theqoo",
-    "id값": "4337028145",
-    "제목": "임영웅 고양콘서트 3일간 MD구매 영수증에 적힌 멘트들.jpg",
-    "작성시간": "2026-09-06 15:18:00",
-    "댓글수": 1,
-    "조회수": 628,
-    "원문URL": "https://theqoo.net/square/4337028145"
   }
 ]
