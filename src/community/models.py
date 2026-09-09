@@ -5,7 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-OUTPUT_FIELDS = ("사이트", "id값", "제목", "작성시간", "댓글수", "조회수", "원문URL")
+SOURCE_FIELD = "수집처"
+ISSUELINK_SOURCE = "issuelink"
+OUTPUT_FIELDS = (
+    "사이트",
+    "id값",
+    "제목",
+    "작성시간",
+    "댓글수",
+    "조회수",
+    "원문URL",
+    SOURCE_FIELD,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +35,12 @@ class ListingCandidate:
     def key(self) -> tuple[str, str]:
         return self.site, self.post_id
 
-    def to_record(self, original_url: str) -> dict[str, object]:
+    def to_record(
+        self,
+        original_url: str,
+        score: int,
+        sources: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
         return {
             "사이트": self.site,
             "id값": self.post_id,
@@ -33,6 +49,7 @@ class ListingCandidate:
             "댓글수": self.comment_count,
             "조회수": self.view_count,
             "원문URL": original_url,
+            SOURCE_FIELD: sources or [{"source": ISSUELINK_SOURCE, "score": score}],
         }
 
 

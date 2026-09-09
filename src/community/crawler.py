@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
-from .models import CrawlStats
+from .models import ISSUELINK_SOURCE, OUTPUT_FIELDS, SOURCE_FIELD, CrawlStats
 from .parsing import KST, record_key
 from .repository import JsonRecordRepository
 from .timing import Deadline
@@ -60,6 +60,7 @@ class RealtimeCrawler:
         deadline = Deadline(self._config.max_runtime_seconds)
         reference_time = datetime.now(KST)
         cached_records = self._repository.load()
+        cached_records_by_key = self._build_record_cache(cached_records)
         original_url_cache = self._build_original_url_cache(cached_records)
         self._logger.info(
             "기존 JSON 원문 URL 캐시: 레코드 %s개, URL %s개",
@@ -81,6 +82,7 @@ class RealtimeCrawler:
                 records,
                 known_keys,
                 original_url_cache,
+                cached_records_by_key,
                 stats,
                 deadline,
                 reference_time,
@@ -117,10 +119,12 @@ class RealtimeCrawler:
         records: list[dict[str, Any]],
         known_keys: set[tuple[str, str]],
         original_url_cache: dict[tuple[str, str], str],
+        cached_records_by_key: dict[tuple[str, str], dict[str, Any]],
         stats: CrawlStats,
         deadline: Deadline,
         reference_time: datetime,
     ) -> None:
+        source_score = 0
         for page_number in range(1, self._config.max_pages + 1):
             deadline.ensure_available()
             page_started = time.perf_counter()
@@ -137,6 +141,7 @@ class RealtimeCrawler:
 
             for candidate in page.candidates:
                 deadline.ensure_available()
+                source_score += 1
                 if candidate.key in known_keys:
                     stats.duplicates += 1
                     continue
@@ -162,7 +167,17 @@ class RealtimeCrawler:
                     source = "신규 조회"
                     deadline.sleep(random.uniform(0.5, 0.8))
 
-                records.append(candidate.to_record(original_url))
+                cached_record = cached_records_by_key.get(candidate.key)
+                sources = self._merge_source_scores(
+                    cached_record.get(SOURCE_FIELD) if cached_record else None,
+                    source_score,
+                )
+                record = candidate.to_record(original_url, source_score, sources)
+                if cached_record:
+                    for field, value in cached_record.items():
+                        if field not in OUTPUT_FIELDS:
+                            record[field] = value
+                records.append(record)
                 known_keys.add(candidate.key)
                 stats.saved += 1
                 self._logger.info(
@@ -189,6 +204,17 @@ class RealtimeCrawler:
             deadline.sleep(random.uniform(0.7, 1.2))
 
     @staticmethod
+    def _build_record_cache(
+        records: list[dict[str, Any]],
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        cache: dict[tuple[str, str], dict[str, Any]] = {}
+        for record in records:
+            key = record_key(record)
+            if key is not None:
+                cache[key] = record
+        return cache
+
+    @staticmethod
     def _build_original_url_cache(
         records: list[dict[str, Any]],
     ) -> dict[tuple[str, str], str]:
@@ -200,6 +226,23 @@ class RealtimeCrawler:
             if key is not None and original_url:
                 cache[key] = original_url
         return cache
+
+    @staticmethod
+    def _merge_source_scores(
+        previous_sources: object,
+        score: int,
+    ) -> list[dict[str, object]]:
+        """Replace this crawler's score while retaining other collection sources."""
+        merged: list[dict[str, object]] = []
+        if isinstance(previous_sources, list):
+            for source in previous_sources:
+                if not isinstance(source, dict):
+                    continue
+                if source.get("source") == ISSUELINK_SOURCE:
+                    continue
+                merged.append(dict(source))
+        merged.append({"source": ISSUELINK_SOURCE, "score": score})
+        return merged
 
     def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
         """Push a saved checkpoint when running inside GitHub Actions."""
