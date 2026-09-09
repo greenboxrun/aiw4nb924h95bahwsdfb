@@ -42,7 +42,7 @@ class CrawlStats:
 
     listed: int = 0
     saved: int = 0
-    updated: int = 0
+    cached_url_hits: int = 0
     duplicates: int = 0
     expired_skipped: int = 0
     redirect_successes: int = 0

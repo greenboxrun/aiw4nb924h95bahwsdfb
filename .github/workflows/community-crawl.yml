@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       max_new_posts:
-        description: "Maximum number of posts to retain after collection"
+        description: "Number of posts to collect into the fresh IssueLink snapshot"
         required: false
         default: "1000"
         type: string
       max_pages:
         description: "Maximum IssueLink pages to crawl (must be at least 10)"
         required: false
-        default: "30"
+        default: "20"
         type: string
       retention_hours:
         description: "Retention period in hours"
@@ -52,7 +52,7 @@ jobs:
         shell: bash
         env:
           MAX_NEW_POSTS: ${{ inputs.max_new_posts || '1000' }}
-          MAX_PAGES: ${{ inputs.max_pages || '15' }}
+          MAX_PAGES: ${{ inputs.max_pages || '20' }}
           RETENTION_HOURS: ${{ inputs.retention_hours || '48' }}
         run: >-
           python -u -m src.community.issuelink_realtime_crawler

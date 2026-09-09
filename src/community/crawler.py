@@ -14,17 +14,16 @@ from typing import Any
 
 from .clients import IssueLinkListingClient
 from .models import CrawlStats
-from .parsing import KST, remove_expired
-from .record_policy import build_indexes, deduplicate, limit_to_target, update_existing
+from .parsing import KST, record_key
 from .repository import JsonRecordRepository
-from .timing import CrawlDeadlineExceeded, Deadline
+from .timing import Deadline
 
 
 @dataclass(frozen=True, slots=True)
 class CrawlerConfig:
     target_total_posts: int = 1000
     initial_pages: int = 10
-    max_pages: int = 30
+    max_pages: int = 20
     retention_hours: int = 48
     max_runtime_seconds: float | None = None
     headed: bool = False
@@ -43,7 +42,7 @@ class CrawlerConfig:
 
 
 class RealtimeCrawler:
-    """Coordinate listing, redirect resolution, deduplication, and persistence."""
+    """Build a fresh listing snapshot while reusing cached original URLs."""
 
     def __init__(
         self,
@@ -60,53 +59,46 @@ class RealtimeCrawler:
         started = time.perf_counter()
         deadline = Deadline(self._config.max_runtime_seconds)
         reference_time = datetime.now(KST)
-        records = self._repository.load()
-        retained = deduplicate(
-            remove_expired(records, self._config.retention_hours, reference_time)
+        cached_records = self._repository.load()
+        original_url_cache = self._build_original_url_cache(cached_records)
+        self._logger.info(
+            "기존 JSON 원문 URL 캐시: 레코드 %s개, URL %s개",
+            len(cached_records),
+            len(original_url_cache),
         )
-        removed = len(records) - len(retained)
-        self._repository.save(retained)
-        self._logger.info("기존 데이터: %s개, 만료 삭제: %s개", len(records), removed)
 
         stats = CrawlStats()
-        known_keys, record_indexes = build_indexes(retained)
+        records: list[dict[str, Any]] = []
+        known_keys: set[tuple[str, str]] = set()
 
-        try:
-            with IssueLinkListingClient(
+        with IssueLinkListingClient(
+            deadline,
+            self._logger,
+            headed=self._config.headed,
+        ) as listings:
+            self._crawl_pages(
+                listings,
+                records,
+                known_keys,
+                original_url_cache,
+                stats,
                 deadline,
-                self._logger,
-                headed=self._config.headed,
-            ) as listings:
-                self._crawl_pages(
-                    listings,
-                    retained,
-                    known_keys,
-                    record_indexes,
-                    stats,
-                    deadline,
-                    reference_time,
-                )
-        except CrawlDeadlineExceeded:
-            if self._config.max_runtime_seconds is not None:
-                self._logger.warning(
-                    "%s초 실행 제한에 도달해 현재까지 저장된 결과로 중단했습니다.",
-                    self._config.max_runtime_seconds,
-                )
-        finally:
-            limit_to_target(retained, self._config.target_total_posts)
-            self._repository.save(retained)
-            self._push_checkpoint(retained, stats.saved)
+                reference_time,
+            )
+
+        self._repository.save(records)
+        self._push_checkpoint(records, stats.saved)
 
         elapsed = time.perf_counter() - started
         self._logger.info(
-            "완료: %.1f초, 목록 %s개, 신규 %s개, 갱신 %s개, 중복 %s개, "
+            "완료: %.1f초, 목록 %s개, 새 스냅샷 %s개, URL 캐시 재사용 %s개, 중복 %s개, "
             "만료 스킵 %s개, 리다이렉트 성공 %s개, CUPID 챌린지 %s회, "
             "쿠키 갱신 %s회, 네트워크 오류 %s회, 최종 실패(원문 주소 확보 실패) %s개, "
             "JSON 총 %s개",
             elapsed,
             stats.listed,
             stats.saved,
-            stats.updated,
+            stats.cached_url_hits,
             stats.duplicates,
             stats.expired_skipped,
             stats.redirect_successes,
@@ -114,7 +106,7 @@ class RealtimeCrawler:
             stats.clearance_refreshes,
             stats.network_errors,
             stats.request_failures,
-            len(retained),
+            len(records),
         )
         self._logger.info("저장 위치: %s", self._repository.path.resolve())
         return stats
@@ -124,67 +116,14 @@ class RealtimeCrawler:
         listings: IssueLinkListingClient,
         records: list[dict[str, Any]],
         known_keys: set[tuple[str, str]],
-        record_indexes: dict[tuple[str, str], int],
+        original_url_cache: dict[tuple[str, str], str],
         stats: CrawlStats,
         deadline: Deadline,
         reference_time: datetime,
     ) -> None:
-        self._crawl_page_range(
-            listings,
-            records,
-            known_keys,
-            record_indexes,
-            stats,
-            deadline,
-            start_page=1,
-            end_page=self._config.initial_pages,
-            stop_at_target=False,
-            reference_time=reference_time,
-        )
-
-        limit_to_target(records, self._config.target_total_posts)
-        known_keys, record_indexes = build_indexes(records)
-        self._repository.save(records)
-        self._logger.info(
-            "필수 목록 1~%s페이지 처리 후 JSON %s개",
-            self._config.initial_pages,
-            len(records),
-        )
-
-        if len(records) >= self._config.target_total_posts:
-            return
-
-        self._crawl_page_range(
-            listings,
-            records,
-            known_keys,
-            record_indexes,
-            stats,
-            deadline,
-            start_page=self._config.initial_pages + 1,
-            end_page=self._config.max_pages,
-            stop_at_target=True,
-            reference_time=reference_time,
-        )
-
-    def _crawl_page_range(
-        self,
-        listings: IssueLinkListingClient,
-        records: list[dict[str, Any]],
-        known_keys: set[tuple[str, str]],
-        record_indexes: dict[tuple[str, str], int],
-        stats: CrawlStats,
-        deadline: Deadline,
-        *,
-        start_page: int,
-        end_page: int,
-        stop_at_target: bool,
-        reference_time: datetime,
-    ) -> None:
-        for page_number in range(start_page, end_page + 1):
+        for page_number in range(1, self._config.max_pages + 1):
             deadline.ensure_available()
             page_started = time.perf_counter()
-            page_changed = False
             page = listings.read_page(
                 page_number,
                 self._config.retention_hours,
@@ -196,20 +135,17 @@ class RealtimeCrawler:
             if not page.candidates and not page.expired_count:
                 break
 
-            try:
-                for candidate in page.candidates:
-                    deadline.ensure_available()
-                    if candidate.key in known_keys:
-                        stats.duplicates += 1
-                        existing = records[record_indexes[candidate.key]]
-                        if update_existing(existing, candidate):
-                            stats.updated += 1
-                            page_changed = True
-                        continue
+            for candidate in page.candidates:
+                deadline.ensure_available()
+                if candidate.key in known_keys:
+                    stats.duplicates += 1
+                    continue
 
-                    if stop_at_target and len(records) >= self._config.target_total_posts:
-                        continue
-
+                original_url = original_url_cache.get(candidate.key)
+                if original_url:
+                    stats.cached_url_hits += 1
+                    source = "캐시"
+                else:
                     redirect = listings.resolve_redirect(candidate.issue_link)
                     stats.cupid_challenges += redirect.challenge_count
                     stats.clearance_refreshes += redirect.clearance_refreshes
@@ -221,36 +157,49 @@ class RealtimeCrawler:
                             candidate.issue_link,
                         )
                         continue
-
                     stats.redirect_successes += 1
-                    records.append(candidate.to_record(redirect.original_url))
-                    known_keys.add(candidate.key)
-                    record_indexes[candidate.key] = len(records) - 1
-                    stats.saved += 1
-                    page_changed = True
-                    self._logger.info(
-                        "저장 %s/%s: %s/%s",
-                        stats.saved,
-                        self._config.target_total_posts,
-                        candidate.site,
-                        candidate.post_id,
-                    )
+                    original_url = redirect.original_url
+                    source = "신규 조회"
                     deadline.sleep(random.uniform(0.5, 0.8))
-            finally:
-                if page_changed:
-                    self._repository.save(records)
+
+                records.append(candidate.to_record(original_url))
+                known_keys.add(candidate.key)
+                stats.saved += 1
+                self._logger.info(
+                    "새 스냅샷 %s/%s (%s): %s/%s",
+                    stats.saved,
+                    self._config.target_total_posts,
+                    source,
+                    candidate.site,
+                    candidate.post_id,
+                )
+                if len(records) >= self._config.target_total_posts:
+                    break
 
             self._logger.info(
-                "목록 %s/%s: %s개, 신규 누적 %s개, %.1f초",
+                "목록 %s/%s: %s개, 새 스냅샷 누적 %s개, %.1f초",
                 page_number,
-                end_page,
+                self._config.max_pages,
                 len(page.candidates),
                 stats.saved,
                 time.perf_counter() - page_started,
             )
-            if stop_at_target and len(records) >= self._config.target_total_posts:
+            if len(records) >= self._config.target_total_posts:
                 break
             deadline.sleep(random.uniform(0.7, 1.2))
+
+    @staticmethod
+    def _build_original_url_cache(
+        records: list[dict[str, Any]],
+    ) -> dict[tuple[str, str], str]:
+        """Use prior snapshots solely as a site/post-ID to original-URL cache."""
+        cache: dict[tuple[str, str], str] = {}
+        for record in records:
+            key = record_key(record)
+            original_url = str(record.get("원문URL", "")).strip()
+            if key is not None and original_url:
+                cache[key] = original_url
+        return cache
 
     def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
         """Push a saved checkpoint when running inside GitHub Actions."""
