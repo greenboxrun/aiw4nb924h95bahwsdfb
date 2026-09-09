@@ -12,7 +12,7 @@ from typing import Any
 from .clients import IssueLinkListingClient
 from .models import ISSUELINK_SOURCE, OUTPUT_FIELDS, SOURCE_FIELD, CrawlStats
 from .parsing import KST, record_key
-from .repository import JsonRecordRepository
+from .ports import ListingClientFactory, RecordRepository
 from .timing import Deadline
 
 
@@ -43,14 +43,16 @@ class RealtimeCrawler:
 
     def __init__(
         self,
-        repository: JsonRecordRepository,
+        repository: RecordRepository,
         config: CrawlerConfig,
         logger: logging.Logger,
+        listing_client_factory: ListingClientFactory = IssueLinkListingClient,
     ) -> None:
         config.validate()
         self._repository = repository
         self._config = config
         self._logger = logger
+        self._listing_client_factory = listing_client_factory
 
     def run(self) -> CrawlStats:
         started = time.perf_counter()
@@ -69,7 +71,7 @@ class RealtimeCrawler:
         records: list[dict[str, Any]] = []
         known_keys: set[tuple[str, str]] = set()
 
-        with IssueLinkListingClient(
+        with self._listing_client_factory(
             deadline,
             self._logger,
             headed=self._config.headed,
