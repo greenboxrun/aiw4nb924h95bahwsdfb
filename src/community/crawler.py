@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
 import random
-import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from .clients import IssueLinkListingClient
@@ -89,7 +86,6 @@ class RealtimeCrawler:
             )
 
         self._repository.save(records)
-        self._push_checkpoint(records, stats.saved)
 
         elapsed = time.perf_counter() - started
         self._logger.info(
@@ -243,57 +239,3 @@ class RealtimeCrawler:
                 merged.append(dict(source))
         merged.append({"source": ISSUELINK_SOURCE, "score": score})
         return merged
-
-    def _push_checkpoint(self, records: list[dict[str, Any]], saved_count: int) -> None:
-        """Push a saved checkpoint when running inside GitHub Actions."""
-        if os.environ.get("GITHUB_ACTIONS") != "true":
-            return
-
-        repository_path = self._repository.path.resolve()
-        project_root = Path(__file__).resolve().parents[2]
-        try:
-            relative_path = repository_path.relative_to(project_root)
-        except ValueError as error:
-            raise RuntimeError(
-                f"checkpoint 대상 파일이 저장소 밖에 있습니다: {repository_path}"
-            ) from error
-
-        def run_git(*arguments: str) -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
-                ["git", *arguments],
-                cwd=project_root,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-        run_git("add", str(relative_path))
-        staged = subprocess.run(
-            ["git", "diff", "--cached", "--quiet"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-        )
-        if staged.returncode == 0:
-            return
-        if staged.returncode != 1:
-            raise RuntimeError(staged.stderr.strip() or "Git staged diff 확인 실패")
-
-        run_git("config", "user.name", "github-actions[bot]")
-        run_git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-        run_git("commit", "-m", "Checkpoint community crawl result")
-        last_error = ""
-        for attempt in range(3):
-            try:
-                run_git("push")
-                self._logger.info(
-                    "checkpoint push 완료: 신규 %s개, 전체 %s개",
-                    saved_count,
-                    len(records),
-                )
-                return
-            except subprocess.CalledProcessError as error:
-                last_error = error.stderr.strip() or str(error)
-                if attempt < 2:
-                    time.sleep(2 * (attempt + 1))
-        raise RuntimeError(f"checkpoint push 실패: {last_error}")
