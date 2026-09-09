@@ -10,9 +10,14 @@ from datetime import datetime
 from typing import Any
 
 from .clients import IssueLinkListingClient
-from .models import ISSUELINK_SOURCE, OUTPUT_FIELDS, SOURCE_FIELD, CrawlStats
-from .parsing import KST, record_key
+from .models import OUTPUT_FIELDS, SOURCE_FIELD, CrawlStats
+from .parsing import KST
 from .ports import ListingClientFactory, RecordRepository
+from .record_policy import (
+    build_original_url_cache,
+    build_record_cache,
+    merge_source_scores,
+)
 from .timing import Deadline
 
 
@@ -59,8 +64,8 @@ class RealtimeCrawler:
         deadline = Deadline(self._config.max_runtime_seconds)
         reference_time = datetime.now(KST)
         cached_records = self._repository.load()
-        cached_records_by_key = self._build_record_cache(cached_records)
-        original_url_cache = self._build_original_url_cache(cached_records)
+        cached_records_by_key = build_record_cache(cached_records)
+        original_url_cache = build_original_url_cache(cached_records)
         self._logger.info(
             "기존 JSON 원문 URL 캐시: 레코드 %s개, URL %s개",
             len(cached_records),
@@ -166,7 +171,7 @@ class RealtimeCrawler:
                     deadline.sleep(random.uniform(0.5, 0.8))
 
                 cached_record = cached_records_by_key.get(candidate.key)
-                sources = self._merge_source_scores(
+                sources = merge_source_scores(
                     cached_record.get(SOURCE_FIELD) if cached_record else None,
                     source_score,
                 )
@@ -200,44 +205,3 @@ class RealtimeCrawler:
             if len(records) >= self._config.target_total_posts:
                 break
             deadline.sleep(random.uniform(0.7, 1.2))
-
-    @staticmethod
-    def _build_record_cache(
-        records: list[dict[str, Any]],
-    ) -> dict[tuple[str, str], dict[str, Any]]:
-        cache: dict[tuple[str, str], dict[str, Any]] = {}
-        for record in records:
-            key = record_key(record)
-            if key is not None:
-                cache[key] = record
-        return cache
-
-    @staticmethod
-    def _build_original_url_cache(
-        records: list[dict[str, Any]],
-    ) -> dict[tuple[str, str], str]:
-        """Use prior snapshots solely as a site/post-ID to original-URL cache."""
-        cache: dict[tuple[str, str], str] = {}
-        for record in records:
-            key = record_key(record)
-            original_url = str(record.get("원문URL", "")).strip()
-            if key is not None and original_url:
-                cache[key] = original_url
-        return cache
-
-    @staticmethod
-    def _merge_source_scores(
-        previous_sources: object,
-        score: int,
-    ) -> list[dict[str, object]]:
-        """Replace this crawler's score while retaining other collection sources."""
-        merged: list[dict[str, object]] = []
-        if isinstance(previous_sources, list):
-            for source in previous_sources:
-                if not isinstance(source, dict):
-                    continue
-                if source.get("source") == ISSUELINK_SOURCE:
-                    continue
-                merged.append(dict(source))
-        merged.append({"source": ISSUELINK_SOURCE, "score": score})
-        return merged

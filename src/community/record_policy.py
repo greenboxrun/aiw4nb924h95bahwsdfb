@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from .models import ListingCandidate
+from .models import ISSUELINK_SOURCE, SOURCE_FIELD, ListingCandidate
 from .parsing import parse_integer, parse_written_at, record_key
 
 
@@ -39,6 +39,23 @@ def build_indexes(records: list[Record]) -> tuple[set[RecordKey], dict[RecordKey
     return set(indexes), indexes
 
 
+def build_record_cache(records: list[Record]) -> dict[RecordKey, Record]:
+    """Index valid records by their source-site/post-ID key."""
+    _, indexes = build_indexes(records)
+    return {key: records[index] for key, index in indexes.items()}
+
+
+def build_original_url_cache(records: list[Record]) -> dict[RecordKey, str]:
+    """Index reusable original URLs without changing the stored records."""
+    cache: dict[RecordKey, str] = {}
+    for record in records:
+        key = record_key(record)
+        original_url = str(record.get("원문URL", "")).strip()
+        if key is not None and original_url:
+            cache[key] = original_url
+    return cache
+
+
 def limit_to_target(records: list[Record], target: int) -> None:
     """Keep highest-view records, preferring newer records on ties."""
     records.sort(key=record_sort_key)
@@ -59,6 +76,20 @@ def update_existing(record: Record, candidate: ListingCandidate) -> bool:
             record[field] = value
             changed = True
     return changed
+
+
+def merge_source_scores(previous_sources: object, score: int) -> list[dict[str, object]]:
+    """Replace this crawler's score while retaining other collection sources."""
+    merged: list[dict[str, object]] = []
+    if isinstance(previous_sources, list):
+        for source in previous_sources:
+            if not isinstance(source, dict):
+                continue
+            if source.get("source") == ISSUELINK_SOURCE:
+                continue
+            merged.append(dict(source))
+    merged.append({"source": ISSUELINK_SOURCE, "score": score})
+    return merged
 
 
 def record_sort_key(record: Record) -> tuple[int, int, str, str]:
