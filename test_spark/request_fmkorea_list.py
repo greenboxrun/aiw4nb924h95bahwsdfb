@@ -7,10 +7,12 @@ import json
 import sys
 from pathlib import Path
 
-import requests
-
-from src.common.config import load_token
-from src.common.github_actions import GitHubError, create_session, dispatch_workflow, download_result, list_runs, wait_for_completion, wait_for_new_run
+from src.common.github_workflows import (
+    WorkflowRequest,
+    WORKFLOW_ERRORS,
+    run_workflow,
+    save_json_result,
+)
 
 WORKFLOW_FILE = "fmkorea-list.yml"
 ARTIFACT_NAME = "fmkorea-list"
@@ -29,23 +31,21 @@ def main() -> int:
     args = parser.parse_args()
     try:
         pages = validate_pages(args.pages)
-        session = create_session(load_token())
-        known_ids = {run["id"] for run in list_runs(session, WORKFLOW_FILE) if isinstance(run.get("id"), int)}
-        dispatch_workflow(session, WORKFLOW_FILE, {"pages": pages})
-        run = wait_for_new_run(session, WORKFLOW_FILE, known_ids, 45, 5)
-        completed = wait_for_completion(session, run, 900, 5)
-        run_id = completed.get("id")
-        if not isinstance(run_id, int):
-            raise GitHubError("Completed workflow run did not contain a valid run ID")
-        result = download_result(session, run_id, ARTIFACT_NAME)
+        result = run_workflow(
+            WorkflowRequest(
+                workflow_file=WORKFLOW_FILE,
+                artifact_name=ARTIFACT_NAME,
+                inputs={"pages": pages},
+                completion_timeout_seconds=900,
+            )
+        )
         if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_json_result(result, args.output)
             print(f"saved result to {args.output}")
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (GitHubError, requests.RequestException, ValueError) as error:
+    except WORKFLOW_ERRORS as error:
         print(f"FMKorea list request failed: {error}", file=sys.stderr)
         return 1
 

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import argparse
+import json
 from datetime import datetime, timezone
 
-import requests
-
-from src.common.config import load_token
-from src.common.github_actions import GitHubError, create_session, dispatch_workflow, download_result, list_runs, wait_for_completion, wait_for_new_run
+from src.common.github_workflows import WORKFLOW_ERRORS, WorkflowRequest, run_workflow
 
 WORKFLOW_FILE = "hello-artifact.yml"
 ARTIFACT_NAME = "hello-result"
@@ -18,18 +15,21 @@ ARTIFACT_NAME = "hello-result"
 def main() -> int:
     argparse.ArgumentParser(description="Run the hello GitHub Actions workflow and print its artifact").parse_args()
     try:
-        session = create_session(load_token(), "hello-artifact-client")
-        known_ids = {run["id"] for run in list_runs(session, WORKFLOW_FILE) if isinstance(run.get("id"), int)}
         request_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        dispatch_workflow(session, WORKFLOW_FILE, {"request_id": request_id})
-        run = wait_for_new_run(session, WORKFLOW_FILE, known_ids, 30, 3)
-        completed = wait_for_completion(session, run, 180, 3)
-        run_id = completed.get("id")
-        if not isinstance(run_id, int):
-            raise GitHubError("Completed workflow run did not contain a valid run ID")
-        print(json.dumps(download_result(session, run_id, ARTIFACT_NAME), ensure_ascii=False, indent=2))
+        result = run_workflow(
+            WorkflowRequest(
+                workflow_file=WORKFLOW_FILE,
+                artifact_name=ARTIFACT_NAME,
+                inputs={"request_id": request_id},
+                new_run_timeout_seconds=30,
+                completion_timeout_seconds=180,
+                poll_interval_seconds=3,
+                user_agent="hello-artifact-client",
+            )
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (GitHubError, requests.RequestException, ValueError) as error:
+    except WORKFLOW_ERRORS as error:
         print(f"hello artifact test failed: {error}")
         return 1
 
