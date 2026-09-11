@@ -20,6 +20,24 @@ OUTPUT_FIELDS = (
 
 
 @dataclass(frozen=True, slots=True)
+class ListingPage:
+    """Parsed posts and rows skipped by the retention policy."""
+
+    candidates: list["ListingCandidate"]
+    expired_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class RedirectResult:
+    """Outcome and diagnostics from resolving one IssueLink redirect."""
+
+    original_url: str | None
+    challenge_count: int = 0
+    clearance_refreshes: int = 0
+    network_errors: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ListingCandidate:
     """A post extracted from an IssueLink listing page."""
 

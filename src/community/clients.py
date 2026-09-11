@@ -6,20 +6,13 @@ import hashlib
 import logging
 import random
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin
 
 from playwright.sync_api import APIRequestContext, Error as PlaywrightError, Page, sync_playwright
 
-from .models import ListingCandidate
-from .parsing import (
-    is_expired,
-    parse_identity,
-    parse_integer,
-    parse_title_and_comments,
-)
+from .models import ListingPage, RedirectResult
+from .parsing import parse_listing_rows
 from .timing import Deadline
 from .response_policy import (
     detect_challenge,
@@ -43,20 +36,6 @@ USER_AGENT = (
 BLOCKED_RESOURCE_TYPES = {"font", "image", "media", "stylesheet"}
 MAX_REDIRECT_ATTEMPTS = 2
 DIAGNOSTIC_BODY_BYTES = 2048
-
-
-@dataclass(frozen=True, slots=True)
-class ListingPage:
-    candidates: list[ListingCandidate]
-    expired_count: int
-
-
-@dataclass(frozen=True, slots=True)
-class RedirectResult:
-    original_url: str | None
-    challenge_count: int = 0
-    clearance_refreshes: int = 0
-    network_errors: int = 0
 
 
 class IssueLinkListingClient:
@@ -147,31 +126,12 @@ class IssueLinkListingClient:
             }).filter(Boolean)"""
         )
 
-        candidates: list[ListingCandidate] = []
-        expired_count = 0
-        for raw_row in raw_rows:
-            href = str(raw_row.get("href", ""))
-            date = str(raw_row.get("date", ""))
-            if is_expired({"작성시간": date}, retention_hours, now):
-                expired_count += 1
-                continue
-            identity = parse_identity(href)
-            if identity is None:
-                continue
-            site, post_id = identity
-            title, comments = parse_title_and_comments(str(raw_row.get("title", "")))
-            candidates.append(
-                ListingCandidate(
-                    site=site,
-                    post_id=post_id,
-                    title=title,
-                    written_at=date,
-                    comment_count=comments,
-                    view_count=parse_integer(str(raw_row.get("hits", ""))),
-                    issue_link=urljoin(ISSUELINK_ORIGIN, href),
-                )
-            )
-        return ListingPage(candidates=candidates, expired_count=expired_count)
+        return parse_listing_rows(
+            raw_rows,
+            retention_hours,
+            ISSUELINK_ORIGIN,
+            now,
+        )
 
     def resolve_redirect(self, issue_link: str) -> RedirectResult:
         """Resolve a source URL without loading the source site in a page."""

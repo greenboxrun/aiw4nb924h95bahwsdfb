@@ -4,12 +4,55 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any
-from urllib.parse import urlparse
+from typing import Any, Iterable, Mapping
+from urllib.parse import urljoin, urlparse
+
+from .models import ListingCandidate, ListingPage
 
 
 # South Korea uses a fixed UTC+09:00 offset and does not observe DST.
 KST = timezone(timedelta(hours=9), "KST")
+
+
+def parse_listing_rows(
+    raw_rows: Iterable[Mapping[str, object]],
+    retention_hours: int,
+    issue_link_origin: str,
+    now: datetime | None = None,
+) -> ListingPage:
+    """Convert browser-extracted rows into candidates without browser calls."""
+    candidates: list[ListingCandidate] = []
+    expired_count = 0
+    for raw_row in raw_rows:
+        href = _text_value(raw_row.get("href"))
+        written_at = _text_value(raw_row.get("date"))
+        if is_expired({"작성시간": written_at}, retention_hours, now):
+            expired_count += 1
+            continue
+
+        identity = parse_identity(href)
+        if identity is None:
+            continue
+        site, post_id = identity
+        title, comments = parse_title_and_comments(
+            _text_value(raw_row.get("title"))
+        )
+        candidates.append(
+            ListingCandidate(
+                site=site,
+                post_id=post_id,
+                title=title,
+                written_at=written_at,
+                comment_count=comments,
+                view_count=parse_integer(_text_value(raw_row.get("hits"))),
+                issue_link=urljoin(issue_link_origin, href),
+            )
+        )
+    return ListingPage(candidates=candidates, expired_count=expired_count)
+
+
+def _text_value(value: object) -> str:
+    return "" if value is None else str(value)
 
 
 def parse_identity(href: str) -> tuple[str, str] | None:

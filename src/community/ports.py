@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from .clients import ListingPage, RedirectResult
+from .models import ListingPage, RedirectResult
 from .timing import Deadline
 
 
