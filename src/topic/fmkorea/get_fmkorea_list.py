@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 
 URL = "https://www.issuelink.co.kr/community/listview/all/72/comment/_self/blank/blank/blank"
@@ -25,35 +25,36 @@ class Post:
     comments: int
 
 
+def parse_post_row(row: Tag) -> Post | None:
+    """Parse one FMKorea row, returning ``None`` for unrelated rows."""
+    source = row.select_one("td.rank_bg small")
+    title_element = row.select_one(".title")
+    date_element = row.select_one(".second_date span")
+    if not source or source.get_text(strip=True) != "펨코":
+        return None
+    if not title_element or not date_element:
+        return None
+
+    title_text = title_element.get_text(" ", strip=True)
+    match = COMMENT_COUNT_RE.search(title_text)
+    if match is None:
+        return None
+
+    return Post(
+        time=date_element.get_text(strip=True),
+        title=title_text[: match.start()].strip(),
+        comments=int(match.group(1)),
+    )
+
+
 def parse_posts(html: str) -> list[Post]:
     """목록 HTML에서 펨코 게시글을 추출한다."""
     soup = BeautifulSoup(html, "html.parser")
-    posts: list[Post] = []
-
-    for row in soup.select("table tbody tr"):
-        source = row.select_one("td.rank_bg small")
-        title_element = row.select_one(".title")
-        date_element = row.select_one(".second_date span")
-        if not source or source.get_text(strip=True) != "펨코":
-            continue
-        if not title_element or not date_element:
-            continue
-
-        title_text = title_element.get_text(" ", strip=True)
-        match = COMMENT_COUNT_RE.search(title_text)
-        if match is None:
-            # 댓글 수가 없는 비정상 행은 결과를 망가뜨리지 않도록 건너뛴다.
-            continue
-
-        posts.append(
-            Post(
-                time=date_element.get_text(strip=True),
-                title=title_text[: match.start()].strip(),
-                comments=int(match.group(1)),
-            )
-        )
-
-    return posts
+    return [
+        post
+        for row in soup.select("table tbody tr")
+        if (post := parse_post_row(row)) is not None
+    ]
 
 
 def fetch_posts(url: str = URL) -> list[Post]:

@@ -21,7 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from src.common.paths import RESULT_ROOT
 from src.common.files import atomic_write_text
 
-from .get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_posts
+from .get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_post_row
 
 
 BASE_URL = (
@@ -52,25 +52,11 @@ class CrawledPost(Post):
 def parse_page_posts(html: str) -> list[CrawledPost]:
     """게시물 목록에서 기존 정보와 게시물 URL/postid를 함께 추출한다."""
     soup = BeautifulSoup(html, "html.parser")
-    parsed_posts = parse_posts(html)
     posts: list[CrawledPost] = []
-    candidate_rows = []
     for row in soup.select("table tbody tr"):
-        source = row.select_one("td.rank_bg small")
-        title_element = row.select_one(".title")
-        date_element = row.select_one(".second_date span")
-        if not source or source.get_text(strip=True) != "펨코":
+        post = parse_post_row(row)
+        if post is None:
             continue
-        if not title_element or not date_element:
-            continue
-        if COMMENT_COUNT_RE.search(title_element.get_text(" ", strip=True)) is None:
-            continue
-        candidate_rows.append(row)
-
-    for row, post in zip(
-        candidate_rows,
-        parsed_posts,
-    ):
         title_link = row.select_one(".title a[href]")
         if title_link is None:
             continue
