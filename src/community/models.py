@@ -7,6 +7,13 @@ from dataclasses import dataclass
 
 SOURCE_FIELD = "수집처"
 ISSUELINK_SOURCE = "issuelink"
+ISSUELINK_SOURCE_ORDER = (
+    "issuelink_adj",
+    "issuelink_read",
+    "issuelink_comment",
+    "issuelink_click",
+)
+ISSUELINK_SOURCES = frozenset((ISSUELINK_SOURCE, *ISSUELINK_SOURCE_ORDER))
 OUTPUT_FIELDS = (
     "사이트",
     "id값",
@@ -67,7 +74,11 @@ class ListingCandidate:
             "댓글수": self.comment_count,
             "조회수": self.view_count,
             "원문URL": original_url,
-            SOURCE_FIELD: sources or [{"source": ISSUELINK_SOURCE, "score": score}],
+            SOURCE_FIELD: (
+                sources
+                if sources is not None
+                else [{"source": ISSUELINK_SOURCE, "score": score}]
+            ),
         }
 
 

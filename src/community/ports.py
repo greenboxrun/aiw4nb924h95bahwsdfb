@@ -35,6 +35,7 @@ class ListingClient(Protocol):
 
     def read_page(
         self,
+        source: str,
         page_number: int,
         retention_hours: int,
         now: datetime | None = None,

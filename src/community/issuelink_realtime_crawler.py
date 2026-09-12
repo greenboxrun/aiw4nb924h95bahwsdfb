@@ -29,8 +29,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--max-pages",
         type=int,
-        default=20,
-        help="최대 목록 페이지 수(필수 10페이지 포함, 10 이상)",
+        default=10,
+        help="각 IssueLink 목록의 수집 페이지 수(정확히 10)",
     )
     parser.add_argument("--retention-hours", type=int, default=48)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)

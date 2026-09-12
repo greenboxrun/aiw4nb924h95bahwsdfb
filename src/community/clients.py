@@ -15,7 +15,7 @@ from .redirects import IssueLinkRedirectResolver
 from .settings import (
     BLOCKED_RESOURCE_TYPES,
     ISSUELINK_ORIGIN,
-    LIST_URL,
+    SOURCE_LISTS,
     USER_AGENT,
 )
 from .timing import Deadline
@@ -74,11 +74,12 @@ class IssueLinkListingClient:
             route.continue_()
 
     @staticmethod
-    def _page_url(page_number: int) -> str:
-        return LIST_URL if page_number == 1 else f"{LIST_URL}/{page_number}"
+    def _page_url(base_url: str, page_number: int) -> str:
+        return base_url if page_number == 1 else f"{base_url}/{page_number}"
 
     def read_page(
         self,
+        source: str,
         page_number: int,
         retention_hours: int,
         now: datetime | None = None,
@@ -88,8 +89,13 @@ class IssueLinkListingClient:
         self._deadline.ensure_available()
         started = time.perf_counter()
         page = self._page
+        source_urls = dict(SOURCE_LISTS)
+        try:
+            base_url = source_urls[source]
+        except KeyError as error:
+            raise ValueError(f"지원하지 않는 IssueLink 수집처입니다: {source}") from error
         page.goto(
-            self._page_url(page_number),
+            self._page_url(base_url, page_number),
             wait_until="domcontentloaded",
             timeout=self._deadline.timeout_milliseconds(30),
         )
@@ -99,6 +105,7 @@ class IssueLinkListingClient:
         )
         self._log_browser_state(
             "목록 로드",
+            source=source,
             page_number=page_number,
             elapsed=time.perf_counter() - started,
         )
@@ -128,13 +135,21 @@ class IssueLinkListingClient:
             raise RuntimeError("listing client is not open")
         return self._redirect_resolver.resolve(issue_link)
 
-    def _log_browser_state(self, event: str, *, page_number: int, elapsed: float) -> None:
+    def _log_browser_state(
+        self,
+        event: str,
+        *,
+        source: str,
+        page_number: int,
+        elapsed: float,
+    ) -> None:
         if self._page is None:
             return
         self._logger.debug(
-            "%s: page=%s url=%s elapsed=%.2fs remaining=%.1fs "
+            "%s: source=%s page=%s url=%s elapsed=%.2fs remaining=%.1fs "
             "cookies=%s cupid_present=%s",
             event,
+            source,
             page_number,
             self._page.url,
             elapsed,

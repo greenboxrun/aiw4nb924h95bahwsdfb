@@ -4,6 +4,23 @@ LIST_URL = (
     "https://www.issuelink.co.kr/community/listview/all/48/"
     "click/_self/blank/blank/blank"
 )
+SOURCE_LISTS = (
+    (
+        "issuelink_adj",
+        "https://www.issuelink.co.kr/community/listview/all/48/adj/_self/blank/blank/blank",
+    ),
+    (
+        "issuelink_read",
+        "https://www.issuelink.co.kr/community/listview/all/48/read/_self/blank/blank/blank",
+    ),
+    (
+        "issuelink_comment",
+        "https://www.issuelink.co.kr/community/listview/all/48/comment/_self/blank/blank/blank",
+    ),
+    ("issuelink_click", LIST_URL),
+)
+PAGES_PER_LIST = 10
+TITLE_EXCLUDE_KEYWORDS = ("ㅇㅎ", "후방", "약후")
 ISSUELINK_ORIGIN = "https://www.issuelink.co.kr"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

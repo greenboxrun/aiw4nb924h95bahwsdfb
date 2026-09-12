@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-from .models import OUTPUT_FIELDS, ISSUELINK_SOURCE, SOURCE_FIELD, ListingCandidate
+from .models import (
+    ISSUELINK_SOURCES,
+    ISSUELINK_SOURCE_ORDER,
+    OUTPUT_FIELDS,
+    SOURCE_FIELD,
+    ListingCandidate,
+)
 from .parsing import record_key
 
 
@@ -33,17 +40,26 @@ def build_original_url_cache(records: list[Record]) -> dict[RecordKey, str]:
     return cache
 
 
-def merge_source_scores(previous_sources: object, score: int) -> list[dict[str, object]]:
-    """Replace this crawler's score while retaining other collection sources."""
+def merge_source_scores(
+    previous_sources: object,
+    source_scores: Mapping[str, int],
+) -> list[dict[str, object]]:
+    """Replace IssueLink scores while retaining other collection sources."""
     merged: list[dict[str, object]] = []
     if isinstance(previous_sources, list):
         for source in previous_sources:
             if not isinstance(source, dict):
                 continue
-            if source.get("source") == ISSUELINK_SOURCE:
+            if (
+                isinstance(source.get("source"), str)
+                and source.get("source") in ISSUELINK_SOURCES
+            ):
                 continue
             merged.append(dict(source))
-    merged.append({"source": ISSUELINK_SOURCE, "score": score})
+    for source in ISSUELINK_SOURCE_ORDER:
+        score = source_scores.get(source)
+        if score is not None:
+            merged.append({"source": source, "score": score})
     return merged
 
 
@@ -78,7 +94,7 @@ class SnapshotBuilder:
         self,
         candidate: ListingCandidate,
         original_url: str,
-        score: int,
+        source_scores: Mapping[str, int],
     ) -> Record:
         if self.contains(candidate.key):
             raise ValueError(f"duplicate snapshot record: {candidate.key}")
@@ -86,9 +102,13 @@ class SnapshotBuilder:
         cached_record = self._cached_records.get(candidate.key)
         sources = merge_source_scores(
             cached_record.get(SOURCE_FIELD) if cached_record else None,
-            score,
+            source_scores,
         )
-        record = candidate.to_record(original_url, score, sources)
+        record = candidate.to_record(
+            original_url,
+            min(source_scores.values()),
+            sources,
+        )
         if cached_record:
             for field, value in cached_record.items():
                 if field not in OUTPUT_FIELDS:

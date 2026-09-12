@@ -9,9 +9,9 @@ on:
         default: "1000"
         type: string
       max_pages:
-        description: "Maximum IssueLink pages to crawl (must be at least 10)"
+        description: "IssueLink pages per source (must be 10)"
         required: false
-        default: "20"
+        default: "10"
         type: string
       retention_hours:
         description: "Retention period in hours"
