@@ -21,8 +21,8 @@ from .response_policy import (
 from .settings import (
     DIAGNOSTIC_BODY_BYTES,
     ISSUELINK_ORIGIN,
-    LIST_URL,
     MAX_REDIRECT_ATTEMPTS,
+    SOURCE_LISTS,
 )
 from .timing import Deadline
 
@@ -201,7 +201,11 @@ class IssueLinkRedirectResolver:
     def _refresh_clearance(self) -> None:
         started = time.perf_counter()
         before = self._cookie_metadata()
-        target_url = self._page.url if self._page.url.startswith(ISSUELINK_ORIGIN) else LIST_URL
+        target_url = (
+            self._page.url
+            if self._page.url.startswith(ISSUELINK_ORIGIN)
+            else SOURCE_LISTS[0][1]
+        )
         self._logger.warning(
             "CUPID 쿠키 갱신 시작: url=%s cookies_before=%s remaining=%.1fs",
             target_url,
