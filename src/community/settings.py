@@ -11,7 +11,6 @@ SOURCE_LISTS = (
     ),
 )
 PAGES_PER_LIST = 10
-TITLE_EXCLUDE_KEYWORDS = ("ㅇㅎ", "후방", "약후", "ㅎㅂ")
 ISSUELINK_ORIGIN = "https://www.issuelink.co.kr"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

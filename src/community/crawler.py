@@ -14,7 +14,7 @@ from .models import CrawlStats, ListingCandidate
 from .parsing import KST
 from .ports import ListingClient, ListingClientFactory, RecordRepository
 from .record_policy import SnapshotBuilder
-from .settings import PAGES_PER_LIST, SOURCE_LISTS, TITLE_EXCLUDE_KEYWORDS
+from .settings import PAGES_PER_LIST, SOURCE_LISTS
 from .timing import Deadline
 
 
@@ -123,9 +123,8 @@ class RealtimeCrawler:
         )
         ranked_candidates = self._rank_candidates(candidates)
         self._logger.info(
-            "후보 병합 완료: 고유 %s개, 제목 필터 제외 %s개, 정렬 후보 %s개",
+            "후보 병합 완료: 고유 %s개, 정렬 후보 %s개",
             len(candidates),
-            len(candidates) - len(ranked_candidates),
             len(ranked_candidates),
         )
 
@@ -244,8 +243,6 @@ class RealtimeCrawler:
         for aggregate in candidates.values():
             candidate = aggregate.get("candidate")
             if not isinstance(candidate, ListingCandidate):
-                continue
-            if any(keyword in candidate.title for keyword in TITLE_EXCLUDE_KEYWORDS):
                 continue
             source_scores = aggregate.get("source_scores")
             if not isinstance(source_scores, dict) or not source_scores:
