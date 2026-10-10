@@ -97,3 +97,4 @@ class CrawlStats:
     clearance_refreshes: int = 0
     network_errors: int = 0
     request_failures: int = 0
+    listing_failures: int = 0

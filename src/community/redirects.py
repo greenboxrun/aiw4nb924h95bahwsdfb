@@ -21,6 +21,7 @@ from .response_policy import (
 from .settings import (
     DIAGNOSTIC_BODY_BYTES,
     ISSUELINK_ORIGIN,
+    LISTING_LINK_SELECTOR,
     MAX_REDIRECT_ATTEMPTS,
     SOURCE_LISTS,
 )
@@ -217,7 +218,7 @@ class IssueLinkRedirectResolver:
             wait_until="domcontentloaded",
             timeout=self._deadline.timeout_milliseconds(30),
         )
-        self._page.locator("table tr a[href*='/community/go/']").first.wait_for(
+        self._page.locator(LISTING_LINK_SELECTOR).first.wait_for(
             state="visible",
             timeout=self._deadline.timeout_milliseconds(30),
         )

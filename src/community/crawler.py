@@ -9,12 +9,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from playwright.sync_api import Error as PlaywrightError
+
 from .clients import IssueLinkListingClient
 from .models import CrawlStats, ListingCandidate
 from .parsing import KST
 from .ports import ListingClient, ListingClientFactory, RecordRepository
 from .record_policy import SnapshotBuilder
-from .settings import PAGES_PER_LIST, SOURCE_LISTS
+from .settings import LISTING_PAGE_DELAY_SECONDS, PAGES_PER_LIST, SOURCE_LISTS
 from .timing import Deadline
 
 
@@ -90,7 +92,7 @@ class RealtimeCrawler:
             "완료: %.1f초, 목록 %s개, 새 스냅샷 %s개, URL 캐시 재사용 %s개, 중복 %s개, "
             "만료 스킵 %s개, 리다이렉트 성공 %s개, CUPID 챌린지 %s회, "
             "쿠키 갱신 %s회, 네트워크 오류 %s회, 최종 실패(원문 주소 확보 실패) %s개, "
-            "JSON 총 %s개",
+            "목록 로드 실패 %s회, JSON 총 %s개",
             elapsed,
             stats.listed,
             stats.saved,
@@ -102,6 +104,7 @@ class RealtimeCrawler:
             stats.clearance_refreshes,
             stats.network_errors,
             stats.request_failures,
+            stats.listing_failures,
             snapshot.size,
         )
         self._logger.info("저장 위치: %s", self._repository.path.resolve())
@@ -188,12 +191,25 @@ class RealtimeCrawler:
             for page_number in range(1, self._config.max_pages + 1):
                 deadline.ensure_available()
                 page_started = time.perf_counter()
-                page = listings.read_page(
-                    source,
-                    page_number,
-                    self._config.retention_hours,
-                    reference_time,
-                )
+                try:
+                    page = listings.read_page(
+                        source,
+                        page_number,
+                        self._config.retention_hours,
+                        reference_time,
+                    )
+                except PlaywrightError as error:
+                    stats.listing_failures += 1
+                    self._logger.warning(
+                        "목록 수집 중단, 남은 페이지 건너뜀: source=%s page=%s/%s "
+                        "누적 고유=%s error=%s",
+                        source,
+                        page_number,
+                        self._config.max_pages,
+                        len(candidates),
+                        type(error).__name__,
+                    )
+                    break
                 stats.expired_skipped += page.expired_count
                 stats.listed += len(page.candidates) + page.expired_count
 
@@ -224,7 +240,7 @@ class RealtimeCrawler:
                     time.perf_counter() - page_started,
                 )
                 if page_number < self._config.max_pages:
-                    deadline.sleep(random.uniform(0.8, 1.6))
+                    deadline.sleep(random.uniform(*LISTING_PAGE_DELAY_SECONDS))
 
             self._logger.info(
                 "수집 종료: source=%s rows=%s unique_total=%s",
@@ -233,6 +249,8 @@ class RealtimeCrawler:
                 len(candidates),
             )
 
+        if not candidates:
+            raise RuntimeError("IssueLink 목록에서 수집된 후보가 없습니다.")
         return candidates
 
     @staticmethod
