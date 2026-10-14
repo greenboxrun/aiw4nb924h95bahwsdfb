@@ -98,3 +98,5 @@ class CrawlStats:
     network_errors: int = 0
     request_failures: int = 0
     listing_failures: int = 0
+    carried_over: int = 0
+    failed_sources: tuple[str, ...] = ()
