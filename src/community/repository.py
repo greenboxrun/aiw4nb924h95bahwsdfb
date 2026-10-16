@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.common.files import atomic_write_text
+from src.common.files import atomic_write_json
 
 
 class JsonRecordRepository:
@@ -27,7 +27,4 @@ class JsonRecordRepository:
         return [row for row in payload if isinstance(row, dict)]
 
     def save(self, records: list[dict[str, Any]]) -> None:
-        atomic_write_text(
-            self.path,
-            json.dumps(records, ensure_ascii=False, indent=2) + "\n",
-        )
+        atomic_write_json(self.path, records)

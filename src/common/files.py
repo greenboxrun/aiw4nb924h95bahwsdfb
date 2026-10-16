@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
+
+
+# Windows may briefly lock the destination (antivirus, indexers); back off and retry.
+REPLACE_ATTEMPTS = 10
+REPLACE_BACKOFF_SECONDS = 0.25
 
 
 def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
@@ -23,18 +30,24 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
         ) as temporary:
             temporary.write(content)
             temporary_path = Path(temporary.name)
-        last_error: PermissionError | None = None
-        for attempt in range(10):
-            try:
-                os.replace(temporary_path, path)
-                temporary_path = None
-                break
-            except PermissionError as error:
-                last_error = error
-                if attempt < 9:
-                    time.sleep(0.25 * (attempt + 1))
-        if temporary_path is not None:
-            raise last_error or PermissionError(f"출력 파일 교체 실패: {path}")
+        _replace_with_retry(temporary_path, path)
+        temporary_path = None
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def _replace_with_retry(source: Path, destination: Path) -> None:
+    for attempt in range(1, REPLACE_ATTEMPTS + 1):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS:
+                raise
+            time.sleep(REPLACE_BACKOFF_SECONDS * attempt)
+
+
+def atomic_write_json(path: Path, payload: Any) -> None:
+    """Write pretty UTF-8 JSON atomically so readers never see a partial file."""
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
