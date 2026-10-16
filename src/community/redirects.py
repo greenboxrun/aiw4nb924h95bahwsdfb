@@ -21,17 +21,18 @@ from .response_policy import (
 )
 from .settings import (
     DIAGNOSTIC_BODY_BYTES,
+    FULL_DIAGNOSTIC_EVERY,
     ISSUELINK_ORIGIN,
     LISTING_LINK_SELECTOR,
     MAX_REDIRECT_ATTEMPTS,
+    RETRY_DELAY_SECONDS,
     SOURCE_LISTS,
 )
 from .timing import Deadline
 
 
-REDIRECT_REQUEST_TIMEOUT_SECONDS = 20
+REDIRECT_REQUEST_TIMEOUT_SECONDS = 10
 CLEARANCE_REFRESH_TIMEOUT_SECONDS = 30
-NETWORK_RETRY_DELAY_SECONDS = (0.7, 1.1)
 REDIRECT_REQUEST_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ko-KR,ko;q=0.9",
@@ -84,11 +85,13 @@ class IssueLinkRedirectResolver:
         context: BrowserContext,
         page: Page,
         deadline: Deadline,
+        retry_deadline: Deadline,
         logger: logging.Logger,
     ) -> None:
         self._context = context
         self._page = page
         self._deadline = deadline
+        self._retry_deadline = retry_deadline
         self._logger = logger
         self._cookies = IssueLinkCookieInspector(context)
         self._clearance_refresh_used = False
@@ -96,8 +99,11 @@ class IssueLinkRedirectResolver:
     def resolve(self, issue_link: str) -> RedirectResult:
         """Read only the redirect response and return its original URL."""
         counters = _RedirectCounters()
+        first_started = time.perf_counter()
 
-        for attempt in range(1, MAX_REDIRECT_ATTEMPTS + 1):
+        attempt = 0
+        while True:
+            attempt += 1
             self._deadline.ensure_available()
             started = time.perf_counter()
             try:
@@ -112,8 +118,7 @@ class IssueLinkRedirectResolver:
             except PlaywrightError as error:
                 counters.network_errors += 1
                 self._log_network_error(issue_link, attempt, error, started)
-                if attempt < MAX_REDIRECT_ATTEMPTS:
-                    self._deadline.sleep(random.uniform(*NETWORK_RETRY_DELAY_SECONDS))
+                if self._wait_before_retry(attempt):
                     continue
                 return counters.result(None)
 
@@ -124,36 +129,74 @@ class IssueLinkRedirectResolver:
             if challenge:
                 counters.challenge_count += 1
                 self._log_failed_response(issue_link, attempt, snapshot, challenge)
-                if self._try_refresh_clearance(issue_link, attempt, counters):
+                if self._try_refresh_clearance(issue_link, counters):
                     continue
                 return counters.result(None)
 
             resolved = extract_redirect_url(issue_link, snapshot.headers, snapshot.text)
             if resolved and not is_issuelink_go_url(resolved):
+                if attempt > 1:
+                    self._logger.info(
+                        "원문 주소 재시도 성공: url=%s attempt=%s 대기누적=%.1fs",
+                        issue_link,
+                        attempt,
+                        time.perf_counter() - first_started,
+                    )
                 return counters.result(resolved)
 
-            self._log_failed_response(issue_link, attempt, snapshot, "none")
+            # Server errors are transient like listing failures; other statuses are final.
+            retryable = snapshot.status >= 500
+            if (attempt - 1) % FULL_DIAGNOSTIC_EVERY == 0:
+                self._log_failed_response(issue_link, attempt, snapshot, "none")
+            if retryable and self._wait_before_retry(attempt):
+                self._logger.warning(
+                    "원문 리다이렉트 없음, 재시도: url=%s status=%s attempt=%s "
+                    "retry_remaining=%.0fs",
+                    issue_link,
+                    snapshot.status,
+                    attempt,
+                    self._retry_remaining,
+                )
+                continue
             self._logger.warning(
-                "원문 리다이렉트 없음, 재시도하지 않음: url=%s status=%s",
+                "원문 리다이렉트 없음, 재시도하지 않음: url=%s status=%s attempt=%s reason=%s",
                 issue_link,
                 snapshot.status,
+                attempt,
+                self._stop_reason(attempt) if retryable else "non_retryable_status",
             )
             return counters.result(None)
 
-        return counters.result(None)
+    @property
+    def _retry_remaining(self) -> float:
+        return max(0.0, self._retry_deadline.remaining)
+
+    def _stop_reason(self, attempt: int) -> str:
+        if attempt >= MAX_REDIRECT_ATTEMPTS:
+            return "max_attempts"
+        return "retry_window_closed"
+
+    def _wait_before_retry(self, attempt: int) -> bool:
+        """Sleep a random delay if the attempt cap and retry window allow another try."""
+        if attempt >= MAX_REDIRECT_ATTEMPTS:
+            return False
+        delay = random.uniform(*RETRY_DELAY_SECONDS)
+        if self._retry_deadline.remaining <= delay:
+            return False
+        self._deadline.sleep(delay)
+        return True
 
     def _try_refresh_clearance(
         self,
         issue_link: str,
-        attempt: int,
         counters: _RedirectCounters,
     ) -> bool:
         """Refresh the CUPID cookie once per crawl; return whether to retry."""
-        if self._clearance_refresh_used or attempt >= MAX_REDIRECT_ATTEMPTS:
+        if self._clearance_refresh_used:
             self._logger.warning(
                 "CUPID 챌린지 재시도 중단: url=%s clearance_refresh=%s",
                 issue_link,
-                "already_used" if self._clearance_refresh_used else "unavailable",
+                "already_used",
             )
             return False
         self._clearance_refresh_used = True
@@ -212,10 +255,11 @@ class IssueLinkRedirectResolver:
     ) -> None:
         self._logger.warning(
             "원문 요청 네트워크 오류: transport=playwright_api url=%s "
-            "attempt=%s/%s error=%s:%s elapsed=%.2fs remaining=%.1fs",
+            "attempt=%s/%s retry_remaining=%.0fs error=%s:%s elapsed=%.2fs remaining=%.1fs",
             issue_link,
             attempt,
             MAX_REDIRECT_ATTEMPTS,
+            self._retry_remaining,
             type(error).__name__,
             error,
             time.perf_counter() - started,
@@ -231,12 +275,13 @@ class IssueLinkRedirectResolver:
         started: float,
     ) -> None:
         self._logger.debug(
-            "원문 요청 응답: transport=playwright_api url=%s attempt=%s/%s "
+            "원문 요청 응답: transport=playwright_api url=%s attempt=%s/%s retry_remaining=%.0fs "
             "status=%s location=%s challenge=%s body_bytes=%s elapsed=%.2fs "
             "remaining=%.1fs headers=%s set_cookie_names=%s",
             issue_link,
             attempt,
             MAX_REDIRECT_ATTEMPTS,
+            self._retry_remaining,
             snapshot.status,
             snapshot.headers.get("location", "").strip() or "<없음>",
             challenge or "none",
@@ -259,13 +304,14 @@ class IssueLinkRedirectResolver:
             body[:DIAGNOSTIC_BODY_BYTES].decode("utf-8", errors="replace").split()
         )
         self._logger.warning(
-            "원문 응답 진단: transport=playwright_api url=%s attempt=%s/%s "
+            "원문 응답 진단: transport=playwright_api url=%s attempt=%s/%s retry_remaining=%.0fs "
             "status=%s challenge=%s body_bytes=%s body_sha256=%s "
             "body_preview=%r headers=%s set_cookie_names=%s cookies=%s "
             "cupid_present=%s remaining=%.1fs",
             issue_link,
             attempt,
             MAX_REDIRECT_ATTEMPTS,
+            self._retry_remaining,
             snapshot.status,
             challenge,
             len(body),

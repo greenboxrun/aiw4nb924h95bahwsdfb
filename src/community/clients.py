@@ -18,12 +18,12 @@ from .settings import (
     BLOCKED_RESOURCE_TYPES,
     DIAGNOSTIC_BODY_BYTES,
     ISSUELINK_ORIGIN,
-    LISTING_LINK_SELECTOR,
-    LISTING_FULL_DIAGNOSTIC_EVERY,
+    FULL_DIAGNOSTIC_EVERY,
     LISTING_GOTO_TIMEOUT_SECONDS,
+    LISTING_LINK_SELECTOR,
     LISTING_LINK_TIMEOUT_SECONDS,
-    LISTING_RETRY_DELAY_SECONDS,
-    LISTING_RETRY_WINDOW_SECONDS,
+    RETRY_DELAY_SECONDS,
+    RETRY_WINDOW_SECONDS,
     SOURCE_LISTS,
     USER_AGENT,
 )
@@ -71,7 +71,7 @@ class IssueLinkListingClient:
         self._page: Page | None = None
         self._cookies: IssueLinkCookieInspector | None = None
         self._redirect_resolver: IssueLinkRedirectResolver | None = None
-        self._listing_retry_deadline = Deadline(LISTING_RETRY_WINDOW_SECONDS)
+        self._retry_deadline = Deadline(RETRY_WINDOW_SECONDS)
 
     def __enter__(self) -> "IssueLinkListingClient":
         self._deadline.ensure_available()
@@ -88,6 +88,7 @@ class IssueLinkListingClient:
             self._context,
             self._page,
             self._deadline,
+            self._retry_deadline,
             self._logger,
         )
         return self
@@ -185,8 +186,8 @@ class IssueLinkListingClient:
                     elapsed=time.perf_counter() - started,
                 )
                 # Transient failures recover on reload, so keep retrying within the window.
-                delay = random.uniform(*LISTING_RETRY_DELAY_SECONDS)
-                if self._listing_retry_deadline.remaining <= delay:
+                delay = random.uniform(*RETRY_DELAY_SECONDS)
+                if self._retry_deadline.remaining <= delay:
                     raise
                 self._deadline.sleep(delay)
         if attempt > 1:
@@ -238,9 +239,9 @@ class IssueLinkListingClient:
         error: PlaywrightError,
         elapsed: float,
     ) -> None:
-        retry_remaining = max(0.0, self._listing_retry_deadline.remaining)
+        retry_remaining = max(0.0, self._retry_deadline.remaining)
         error_text = str(error).splitlines()[0] if str(error) else ""
-        if (attempt - 1) % LISTING_FULL_DIAGNOSTIC_EVERY != 0:
+        if (attempt - 1) % FULL_DIAGNOSTIC_EVERY != 0:
             self._logger.warning(
                 "목록 로드 실패: source=%s page=%s attempt=%s status=%s "
                 "error=%s:%s elapsed=%.2fs retry_remaining=%.0fs",
