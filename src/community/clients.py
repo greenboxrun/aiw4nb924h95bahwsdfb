@@ -10,6 +10,7 @@ from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError, Page, sync_playwright
 
+from .cookies import IssueLinkCookieInspector
 from .models import ListingPage, RedirectResult
 from .parsing import parse_listing_rows
 from .redirects import IssueLinkRedirectResolver
@@ -29,6 +30,28 @@ from .settings import (
 from .timing import Deadline
 
 
+DIAGNOSTIC_TEXT_TIMEOUT_MILLISECONDS = 3000
+# Runs in the browser: extract the raw cells of every listing row that links to a post.
+EXTRACT_LISTING_ROWS_JS = """rows => rows.map(row => {
+    const link = row.querySelector("a[href*='/community/go/']");
+    if (!link) return null;
+    return {
+        href: link.getAttribute("href") || "",
+        title: link.textContent?.trim() || "",
+        date: row.querySelector(".second_date span")?.textContent?.trim() || "",
+        hits: row.querySelector(".hit")?.textContent?.trim() || ""
+    };
+}).filter(Boolean)"""
+
+
+def listing_page_url(source: str, page_number: int) -> str:
+    try:
+        base_url = dict(SOURCE_LISTS)[source]
+    except KeyError as error:
+        raise ValueError(f"지원하지 않는 IssueLink 수집처입니다: {source}") from error
+    return base_url if page_number == 1 else f"{base_url}/{page_number}"
+
+
 class IssueLinkListingClient:
     """Read listings and resolve redirects through one Playwright context."""
 
@@ -46,6 +69,7 @@ class IssueLinkListingClient:
         self._browser = None
         self._context = None
         self._page: Page | None = None
+        self._cookies: IssueLinkCookieInspector | None = None
         self._redirect_resolver: IssueLinkRedirectResolver | None = None
         self._listing_retry_deadline = Deadline(LISTING_RETRY_WINDOW_SECONDS)
 
@@ -59,6 +83,7 @@ class IssueLinkListingClient:
         )
         self._context.route("**/*", self._route_unneeded_resources)
         self._page = self._context.new_page()
+        self._cookies = IssueLinkCookieInspector(self._context)
         self._redirect_resolver = IssueLinkRedirectResolver(
             self._context,
             self._page,
@@ -68,12 +93,18 @@ class IssueLinkListingClient:
         return self
 
     def __exit__(self, *_: object) -> None:
-        for resource in (self._context, self._browser, self._playwright):
-            if resource is not None:
-                try:
-                    resource.close() if resource is not self._playwright else resource.stop()
-                except Exception as error:  # pragma: no cover - cleanup best effort
-                    self._logger.warning("브라우저 리소스 종료 실패: %s", error)
+        closers = (
+            (self._context, "close"),
+            (self._browser, "close"),
+            (self._playwright, "stop"),
+        )
+        for resource, method in closers:
+            if resource is None:
+                continue
+            try:
+                getattr(resource, method)()
+            except Exception as error:  # pragma: no cover - cleanup best effort
+                self._logger.warning("브라우저 리소스 종료 실패: %s", error)
 
     @staticmethod
     def _route_unneeded_resources(route: Any) -> None:
@@ -82,10 +113,6 @@ class IssueLinkListingClient:
         else:
             route.continue_()
 
-    @staticmethod
-    def _page_url(base_url: str, page_number: int) -> str:
-        return base_url if page_number == 1 else f"{base_url}/{page_number}"
-
     def read_page(
         self,
         source: str,
@@ -93,17 +120,41 @@ class IssueLinkListingClient:
         retention_hours: int,
         now: datetime | None = None,
     ) -> ListingPage:
-        if self._page is None:
-            raise RuntimeError("listing client is not open")
+        page = self._require_page()
         self._deadline.ensure_available()
         started = time.perf_counter()
-        page = self._page
-        source_urls = dict(SOURCE_LISTS)
-        try:
-            base_url = source_urls[source]
-        except KeyError as error:
-            raise ValueError(f"지원하지 않는 IssueLink 수집처입니다: {source}") from error
-        url = self._page_url(base_url, page_number)
+        url = listing_page_url(source, page_number)
+        self._load_listing(url, source=source, page_number=page_number, started=started)
+        self._log_browser_state(
+            "목록 로드",
+            source=source,
+            page_number=page_number,
+            elapsed=time.perf_counter() - started,
+        )
+        raw_rows = page.locator("table tr").evaluate_all(EXTRACT_LISTING_ROWS_JS)
+        return parse_listing_rows(raw_rows, retention_hours, ISSUELINK_ORIGIN, now)
+
+    def resolve_redirect(self, issue_link: str) -> RedirectResult:
+        """Resolve a source URL without loading the source site in a page."""
+        if self._redirect_resolver is None:
+            raise RuntimeError("listing client is not open")
+        return self._redirect_resolver.resolve(issue_link)
+
+    def _require_page(self) -> Page:
+        if self._page is None:
+            raise RuntimeError("listing client is not open")
+        return self._page
+
+    def _load_listing(
+        self,
+        url: str,
+        *,
+        source: str,
+        page_number: int,
+        started: float,
+    ) -> None:
+        """Load a listing until its links show, retrying within the retry window."""
+        page = self._require_page()
         attempt = 0
         while True:
             attempt += 1
@@ -146,37 +197,12 @@ class IssueLinkListingClient:
                 attempt,
                 time.perf_counter() - started,
             )
-        self._log_browser_state(
-            "목록 로드",
-            source=source,
-            page_number=page_number,
-            elapsed=time.perf_counter() - started,
-        )
-        raw_rows = page.locator("table tr").evaluate_all(
-            """rows => rows.map(row => {
-                const link = row.querySelector("a[href*='/community/go/']");
-                if (!link) return null;
-                return {
-                    href: link.getAttribute("href") || "",
-                    title: link.textContent?.trim() || "",
-                    date: row.querySelector(".second_date span")?.textContent?.trim() || "",
-                    hits: row.querySelector(".hit")?.textContent?.trim() || ""
-                };
-            }).filter(Boolean)"""
-        )
 
-        return parse_listing_rows(
-            raw_rows,
-            retention_hours,
-            ISSUELINK_ORIGIN,
-            now,
-        )
+    def _cookie_metadata(self) -> list[dict[str, object]]:
+        return self._cookies.metadata() if self._cookies is not None else []
 
-    def resolve_redirect(self, issue_link: str) -> RedirectResult:
-        """Resolve a source URL without loading the source site in a page."""
-        if self._redirect_resolver is None:
-            raise RuntimeError("listing client is not open")
-        return self._redirect_resolver.resolve(issue_link)
+    def _has_cupid_cookie(self) -> bool:
+        return self._cookies.has_clearance() if self._cookies is not None else False
 
     def _log_browser_state(
         self,
@@ -228,19 +254,7 @@ class IssueLinkListingClient:
                 retry_remaining,
             )
             return
-        title = ""
-        preview = ""
-        row_count = -1
-        link_count = -1
-        if self._page is not None:
-            try:
-                title = self._page.title()
-                text = self._page.locator("body").inner_text(timeout=3000)
-                preview = " ".join(text.split())[:DIAGNOSTIC_BODY_BYTES]
-                row_count = self._page.locator("table tr").count()
-                link_count = self._page.locator(LISTING_LINK_SELECTOR).count()
-            except PlaywrightError as diagnostic_error:
-                preview = f"<진단 실패: {type(diagnostic_error).__name__}>"
+        title, preview, row_count, link_count = self._page_diagnostics()
         self._logger.warning(
             "목록 로드 실패: source=%s page=%s attempt=%s retry_remaining=%.0fs "
             "request_url=%s current_url=%s status=%s title=%r rows=%s links=%s "
@@ -265,26 +279,22 @@ class IssueLinkListingClient:
             self._has_cupid_cookie(),
         )
 
-    def _cookie_metadata(self) -> list[dict[str, object]]:
-        if self._context is None:
-            return []
-        now = time.time()
-        metadata = []
-        for cookie in self._context.cookies(ISSUELINK_ORIGIN):
-            expires = float(cookie.get("expires", -1))
-            metadata.append(
-                {
-                    "name": str(cookie.get("name", "")),
-                    "domain": str(cookie.get("domain", "")),
-                    "secure": bool(cookie.get("secure", False)),
-                    "session": expires <= 0,
-                    "expired": expires > 0 and expires <= now,
-                }
+    def _page_diagnostics(self) -> tuple[str, str, int, int]:
+        """Return title, body preview, row count and link count of the current page."""
+        title = ""
+        preview = ""
+        row_count = -1
+        link_count = -1
+        if self._page is None:
+            return title, preview, row_count, link_count
+        try:
+            title = self._page.title()
+            text = self._page.locator("body").inner_text(
+                timeout=DIAGNOSTIC_TEXT_TIMEOUT_MILLISECONDS
             )
-        return metadata
-
-    def _has_cupid_cookie(self) -> bool:
-        return any(
-            str(cookie.get("name", "")).upper() == "CUPID"
-            for cookie in self._cookie_metadata()
-        )
+            preview = " ".join(text.split())[:DIAGNOSTIC_BODY_BYTES]
+            row_count = self._page.locator("table tr").count()
+            link_count = self._page.locator(LISTING_LINK_SELECTOR).count()
+        except PlaywrightError as diagnostic_error:
+            preview = f"<진단 실패: {type(diagnostic_error).__name__}>"
+        return title, preview, row_count, link_count
