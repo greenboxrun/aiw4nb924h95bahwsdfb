@@ -6,24 +6,26 @@ import logging
 import random
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from playwright.sync_api import Error as PlaywrightError
 
 from .clients import IssueLinkListingClient
-from .models import CrawlStats, ListingCandidate
+from .models import POST_ID_FIELD, SITE_FIELD, CrawlStats, ListingCandidate
 from .parsing import KST
 from .ports import ListingClient, ListingClientFactory, RecordRepository
-from .record_policy import CarryOverCandidate, SnapshotBuilder
+from .record_policy import CarryOverCandidate, RecordKey, SnapshotBuilder
 from .settings import LISTING_PAGE_DELAY_SECONDS, PAGES_PER_LIST, SOURCE_LISTS
 from .timing import Deadline
+
+
+REDIRECT_DELAY_SECONDS = (0.5, 0.8)
 
 
 @dataclass(frozen=True, slots=True)
 class CrawlerConfig:
     target_total_posts: int = 1000
-    initial_pages: int = 10
     max_pages: int = PAGES_PER_LIST
     retention_hours: int = 48
     max_runtime_seconds: float | None = None
@@ -32,8 +34,6 @@ class CrawlerConfig:
     def validate(self) -> None:
         if self.target_total_posts < 1:
             raise ValueError("max-new-posts는 1 이상이어야 합니다.")
-        if self.initial_pages != 10:
-            raise ValueError("initial-pages는 반드시 10이어야 합니다.")
         if self.max_pages != PAGES_PER_LIST:
             raise ValueError(f"max-pages는 {PAGES_PER_LIST}이어야 합니다.")
         if self.retention_hours < 0:
@@ -42,11 +42,20 @@ class CrawlerConfig:
             raise ValueError("max-runtime-seconds는 1 이상이어야 합니다.")
 
 
+@dataclass(slots=True)
+class CandidateAggregate:
+    """One unique post and its rank in every listing that showed it."""
+
+    candidate: ListingCandidate
+    discovery_order: int
+    source_scores: dict[str, int] = field(default_factory=dict)
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateCollection:
     """Listing candidates plus the lists that failed to load completely."""
 
-    candidates: dict[tuple[str, str], dict[str, object]]
+    candidates: dict[RecordKey, CandidateAggregate]
     failed_sources: frozenset[str]
 
 
@@ -56,7 +65,7 @@ class RankedEntry:
 
     score: int
     order: tuple[int, int]
-    aggregate: dict[str, object] | None = None
+    aggregate: CandidateAggregate | None = None
     carried: CarryOverCandidate | None = None
 
 
@@ -89,48 +98,18 @@ class RealtimeCrawler:
         )
 
         stats = CrawlStats()
-
         with self._listing_client_factory(
             deadline,
             self._logger,
             headed=self._config.headed,
         ) as listings:
-            self._crawl_pages(
-                listings,
-                snapshot,
-                stats,
-                deadline,
-                reference_time,
-            )
+            self._crawl(listings, snapshot, stats, deadline, reference_time)
 
         self._repository.save(snapshot.records)
-
-        elapsed = time.perf_counter() - started
-        self._logger.info(
-            "완료: %.1f초, 목록 %s개, 새 스냅샷 %s개, URL 캐시 재사용 %s개, 중복 %s개, "
-            "만료 스킵 %s개, 리다이렉트 성공 %s개, CUPID 챌린지 %s회, "
-            "쿠키 갱신 %s회, 네트워크 오류 %s회, 최종 실패(원문 주소 확보 실패) %s개, "
-            "목록 로드 실패 %s회, 실패 수집처 %s, 이어붙임 %s개, JSON 총 %s개",
-            elapsed,
-            stats.listed,
-            stats.saved,
-            stats.cached_url_hits,
-            stats.duplicates,
-            stats.expired_skipped,
-            stats.redirect_successes,
-            stats.cupid_challenges,
-            stats.clearance_refreshes,
-            stats.network_errors,
-            stats.request_failures,
-            stats.listing_failures,
-            list(stats.failed_sources),
-            stats.carried_over,
-            snapshot.size,
-        )
-        self._logger.info("저장 위치: %s", self._repository.path.resolve())
+        self._log_summary(stats, snapshot, time.perf_counter() - started)
         return stats
 
-    def _crawl_pages(
+    def _crawl(
         self,
         listings: ListingClient,
         snapshot: SnapshotBuilder,
@@ -138,12 +117,7 @@ class RealtimeCrawler:
         deadline: Deadline,
         reference_time: datetime,
     ) -> None:
-        collection = self._collect_candidates(
-            listings,
-            stats,
-            deadline,
-            reference_time,
-        )
+        collection = self._collect_candidates(listings, stats, deadline, reference_time)
         failed_sources = collection.failed_sources
         stats.failed_sources = tuple(sorted(failed_sources))
         carried = snapshot.carry_over_candidates(
@@ -175,60 +149,87 @@ class RealtimeCrawler:
             deadline.ensure_available()
             if snapshot.size >= self._config.target_total_posts:
                 break
-
             if entry.carried is not None:
-                record = snapshot.add_carried(entry.carried.record)
-                stats.carried_over += 1
-                self._logger.info(
-                    "새 스냅샷 %s/%s (이어붙임, min_score=%s): %s/%s",
-                    snapshot.size,
-                    self._config.target_total_posts,
+                self._add_carried(entry.score, entry.carried, snapshot, stats)
+            elif entry.aggregate is not None:
+                self._add_fresh(
                     entry.score,
-                    record.get("사이트"),
-                    record.get("id값"),
+                    entry.aggregate,
+                    listings,
+                    snapshot,
+                    stats,
+                    deadline,
+                    failed_sources,
                 )
-                continue
 
-            aggregate = entry.aggregate or {}
-            candidate = aggregate.get("candidate")
-            source_scores = aggregate.get("source_scores")
-            if not isinstance(candidate, ListingCandidate) or not isinstance(
-                source_scores, dict
-            ) or not source_scores:
-                continue
+    def _add_carried(
+        self,
+        score: int,
+        carried: CarryOverCandidate,
+        snapshot: SnapshotBuilder,
+        stats: CrawlStats,
+    ) -> None:
+        record = snapshot.add_carried(carried.record)
+        stats.carried_over += 1
+        self._logger.info(
+            "새 스냅샷 %s/%s (이어붙임, min_score=%s): %s/%s",
+            snapshot.size,
+            self._config.target_total_posts,
+            score,
+            record.get(SITE_FIELD),
+            record.get(POST_ID_FIELD),
+        )
 
-            original_url = snapshot.cached_original_url(candidate.key)
-            if original_url:
-                stats.cached_url_hits += 1
-                source = "캐시"
-            else:
-                redirect = listings.resolve_redirect(candidate.issue_link)
-                stats.cupid_challenges += redirect.challenge_count
-                stats.clearance_refreshes += redirect.clearance_refreshes
-                stats.network_errors += redirect.network_errors
-                if redirect.original_url is None:
-                    stats.request_failures += 1
-                    self._logger.warning(
-                        "원문 주소 확보 실패, 건너뜀: %s",
-                        candidate.issue_link,
-                    )
-                    continue
-                stats.redirect_successes += 1
-                original_url = redirect.original_url
-                source = "신규 조회"
-                deadline.sleep(random.uniform(0.5, 0.8))
+    def _add_fresh(
+        self,
+        score: int,
+        aggregate: CandidateAggregate,
+        listings: ListingClient,
+        snapshot: SnapshotBuilder,
+        stats: CrawlStats,
+        deadline: Deadline,
+        failed_sources: frozenset[str],
+    ) -> None:
+        candidate = aggregate.candidate
+        original_url = snapshot.cached_original_url(candidate.key)
+        if original_url:
+            stats.cached_url_hits += 1
+            origin = "캐시"
+        else:
+            original_url = self._resolve_original_url(listings, candidate, stats)
+            if original_url is None:
+                return
+            origin = "신규 조회"
+            deadline.sleep(random.uniform(*REDIRECT_DELAY_SECONDS))
 
-            snapshot.add(candidate, original_url, source_scores, failed_sources)
-            stats.saved += 1
-            self._logger.info(
-                "새 스냅샷 %s/%s (%s, min_score=%s): %s/%s",
-                snapshot.size,
-                self._config.target_total_posts,
-                source,
-                entry.score,
-                candidate.site,
-                candidate.post_id,
-            )
+        snapshot.add(candidate, original_url, aggregate.source_scores, failed_sources)
+        stats.saved += 1
+        self._logger.info(
+            "새 스냅샷 %s/%s (%s, min_score=%s): %s/%s",
+            snapshot.size,
+            self._config.target_total_posts,
+            origin,
+            score,
+            candidate.site,
+            candidate.post_id,
+        )
+
+    def _resolve_original_url(
+        self,
+        listings: ListingClient,
+        candidate: ListingCandidate,
+        stats: CrawlStats,
+    ) -> str | None:
+        redirect = listings.resolve_redirect(candidate.issue_link)
+        stats.cupid_challenges += redirect.challenge_count
+        stats.clearance_refreshes += redirect.clearance_refreshes
+        stats.network_errors += redirect.network_errors
+        if redirect.original_url is None:
+            stats.request_failures += 1
+            self._logger.warning("원문 주소 확보 실패, 건너뜀: %s", candidate.issue_link)
+            return None
+        stats.redirect_successes += 1
+        return redirect.original_url
 
     def _collect_candidates(
         self,
@@ -237,7 +238,7 @@ class RealtimeCrawler:
         deadline: Deadline,
         reference_time: datetime,
     ) -> CandidateCollection:
-        candidates: dict[tuple[str, str], dict[str, object]] = {}
+        candidates: dict[RecordKey, CandidateAggregate] = {}
         failed_sources: set[str] = set()
         discovery_order = 0
 
@@ -275,16 +276,14 @@ class RealtimeCrawler:
                     discovery_order += 1
                     aggregate = candidates.get(candidate.key)
                     if aggregate is None:
-                        candidates[candidate.key] = {
-                            "candidate": candidate,
-                            "source_scores": {source: source_score},
-                            "discovery_order": discovery_order,
-                        }
+                        candidates[candidate.key] = CandidateAggregate(
+                            candidate,
+                            discovery_order,
+                            {source: source_score},
+                        )
                     else:
                         stats.duplicates += 1
-                        scores = aggregate.get("source_scores")
-                        if isinstance(scores, dict):
-                            scores.setdefault(source, source_score)
+                        aggregate.source_scores.setdefault(source, source_score)
 
                 self._logger.info(
                     "목록 수집: source=%s page=%s/%s rows=%s 누적 고유=%s %.1f초",
@@ -311,7 +310,7 @@ class RealtimeCrawler:
 
     @staticmethod
     def _rank_entries(
-        candidates: Mapping[tuple[str, str], dict[str, object]],
+        candidates: Mapping[RecordKey, CandidateAggregate],
         carried: list[CarryOverCandidate],
         snapshot: SnapshotBuilder,
         failed_sources: frozenset[str],
@@ -319,26 +318,19 @@ class RealtimeCrawler:
         """Rank fresh and carried posts together so a failed list keeps its share."""
         entries: list[RankedEntry] = []
         for aggregate in candidates.values():
-            candidate = aggregate.get("candidate")
-            if not isinstance(candidate, ListingCandidate):
-                continue
-            source_scores = aggregate.get("source_scores")
-            if not isinstance(source_scores, dict) or not source_scores:
-                continue
-            scores = list(source_scores.values())
+            scores = list(aggregate.source_scores.values())
             if failed_sources:
                 scores.extend(
                     score
                     for source, score in snapshot.cached_source_scores(
-                        candidate.key
+                        aggregate.candidate.key
                     ).items()
-                    if source in failed_sources and source not in source_scores
+                    if source in failed_sources and source not in aggregate.source_scores
                 )
-            discovery_order = aggregate.get("discovery_order")
             entries.append(
                 RankedEntry(
                     score=min(scores),
-                    order=(0, discovery_order if isinstance(discovery_order, int) else 0),
+                    order=(0, aggregate.discovery_order),
                     aggregate=aggregate,
                 )
             )
@@ -347,3 +339,32 @@ class RealtimeCrawler:
             entries.append(RankedEntry(score=carry.score, order=(1, index), carried=carry))
 
         return sorted(entries, key=lambda entry: (entry.score, entry.order))
+
+    def _log_summary(
+        self,
+        stats: CrawlStats,
+        snapshot: SnapshotBuilder,
+        elapsed: float,
+    ) -> None:
+        self._logger.info(
+            "완료: %.1f초, 목록 %s개, 새 스냅샷 %s개, URL 캐시 재사용 %s개, 중복 %s개, "
+            "만료 스킵 %s개, 리다이렉트 성공 %s개, CUPID 챌린지 %s회, "
+            "쿠키 갱신 %s회, 네트워크 오류 %s회, 최종 실패(원문 주소 확보 실패) %s개, "
+            "목록 로드 실패 %s회, 실패 수집처 %s, 이어붙임 %s개, JSON 총 %s개",
+            elapsed,
+            stats.listed,
+            stats.saved,
+            stats.cached_url_hits,
+            stats.duplicates,
+            stats.expired_skipped,
+            stats.redirect_successes,
+            stats.cupid_challenges,
+            stats.clearance_refreshes,
+            stats.network_errors,
+            stats.request_failures,
+            stats.listing_failures,
+            list(stats.failed_sources),
+            stats.carried_over,
+            snapshot.size,
+        )
+        self._logger.info("저장 위치: %s", self._repository.path.resolve())
