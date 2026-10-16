@@ -1,1 +1,1 @@
-"""GitHub Actions request clients for the FMKorea crawler."""
+"""Production crawlers and shared utilities."""
