@@ -19,8 +19,10 @@ USER_AGENT = (
 )
 BLOCKED_RESOURCE_TYPES = {"font", "image", "media", "stylesheet"}
 LISTING_LINK_SELECTOR = "table tr a[href*='/community/go/']"
-LISTING_LOAD_ATTEMPTS = 2
-LISTING_RETRY_DELAY_SECONDS = (8.0, 15.0)
+# Listing loads keep retrying until this window (measured from crawl start) closes.
+LISTING_RETRY_WINDOW_SECONDS = 18 * 60
+LISTING_RETRY_DELAY_SECONDS = (2.0, 5.0)
+LISTING_FULL_DIAGNOSTIC_EVERY = 10
 LISTING_PAGE_DELAY_SECONDS = (2.0, 4.0)
 MAX_REDIRECT_ATTEMPTS = 2
 DIAGNOSTIC_BODY_BYTES = 2048

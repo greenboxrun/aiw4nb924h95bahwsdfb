@@ -18,8 +18,9 @@ from .settings import (
     DIAGNOSTIC_BODY_BYTES,
     ISSUELINK_ORIGIN,
     LISTING_LINK_SELECTOR,
-    LISTING_LOAD_ATTEMPTS,
+    LISTING_FULL_DIAGNOSTIC_EVERY,
     LISTING_RETRY_DELAY_SECONDS,
+    LISTING_RETRY_WINDOW_SECONDS,
     SOURCE_LISTS,
     USER_AGENT,
 )
@@ -44,6 +45,7 @@ class IssueLinkListingClient:
         self._context = None
         self._page: Page | None = None
         self._redirect_resolver: IssueLinkRedirectResolver | None = None
+        self._listing_retry_deadline = Deadline(LISTING_RETRY_WINDOW_SECONDS)
 
     def __enter__(self) -> "IssueLinkListingClient":
         self._deadline.ensure_available()
@@ -100,7 +102,9 @@ class IssueLinkListingClient:
         except KeyError as error:
             raise ValueError(f"지원하지 않는 IssueLink 수집처입니다: {source}") from error
         url = self._page_url(base_url, page_number)
-        for attempt in range(1, LISTING_LOAD_ATTEMPTS + 1):
+        attempt = 0
+        while True:
+            attempt += 1
             status: int | None = None
             try:
                 response = page.goto(
@@ -124,9 +128,19 @@ class IssueLinkListingClient:
                     error=error,
                     elapsed=time.perf_counter() - started,
                 )
-                if attempt >= LISTING_LOAD_ATTEMPTS:
+                # Transient failures recover on reload, so keep retrying within the window.
+                delay = random.uniform(*LISTING_RETRY_DELAY_SECONDS)
+                if self._listing_retry_deadline.remaining <= delay:
                     raise
-                self._deadline.sleep(random.uniform(*LISTING_RETRY_DELAY_SECONDS))
+                self._deadline.sleep(delay)
+        if attempt > 1:
+            self._logger.info(
+                "목록 로드 재시도 성공: source=%s page=%s attempt=%s 대기누적=%.1fs",
+                source,
+                page_number,
+                attempt,
+                time.perf_counter() - started,
+            )
         self._log_browser_state(
             "목록 로드",
             source=source,
@@ -193,6 +207,22 @@ class IssueLinkListingClient:
         error: PlaywrightError,
         elapsed: float,
     ) -> None:
+        retry_remaining = max(0.0, self._listing_retry_deadline.remaining)
+        error_text = str(error).splitlines()[0] if str(error) else ""
+        if (attempt - 1) % LISTING_FULL_DIAGNOSTIC_EVERY != 0:
+            self._logger.warning(
+                "목록 로드 실패: source=%s page=%s attempt=%s status=%s "
+                "error=%s:%s elapsed=%.2fs retry_remaining=%.0fs",
+                source,
+                page_number,
+                attempt,
+                status,
+                type(error).__name__,
+                error_text,
+                elapsed,
+                retry_remaining,
+            )
+            return
         title = ""
         preview = ""
         row_count = -1
@@ -207,14 +237,14 @@ class IssueLinkListingClient:
             except PlaywrightError as diagnostic_error:
                 preview = f"<진단 실패: {type(diagnostic_error).__name__}>"
         self._logger.warning(
-            "목록 로드 실패: source=%s page=%s attempt=%s/%s request_url=%s "
-            "current_url=%s status=%s title=%r rows=%s links=%s "
+            "목록 로드 실패: source=%s page=%s attempt=%s retry_remaining=%.0fs "
+            "request_url=%s current_url=%s status=%s title=%r rows=%s links=%s "
             "error=%s:%s elapsed=%.2fs remaining=%.1fs body_preview=%r "
             "cookies=%s cupid_present=%s",
             source,
             page_number,
             attempt,
-            LISTING_LOAD_ATTEMPTS,
+            retry_remaining,
             url,
             self._page.url if self._page is not None else "",
             status,
@@ -222,7 +252,7 @@ class IssueLinkListingClient:
             row_count,
             link_count,
             type(error).__name__,
-            str(error).splitlines()[0] if str(error) else "",
+            error_text,
             elapsed,
             self._deadline.remaining,
             preview,
