@@ -19,6 +19,8 @@ from .settings import (
     ISSUELINK_ORIGIN,
     LISTING_LINK_SELECTOR,
     LISTING_FULL_DIAGNOSTIC_EVERY,
+    LISTING_GOTO_TIMEOUT_SECONDS,
+    LISTING_LINK_TIMEOUT_SECONDS,
     LISTING_RETRY_DELAY_SECONDS,
     LISTING_RETRY_WINDOW_SECONDS,
     SOURCE_LISTS,
@@ -110,12 +112,15 @@ class IssueLinkListingClient:
                 response = page.goto(
                     url,
                     wait_until="domcontentloaded",
-                    timeout=self._deadline.timeout_milliseconds(30),
+                    timeout=self._deadline.timeout_milliseconds(LISTING_GOTO_TIMEOUT_SECONDS),
                 )
                 status = response.status if response is not None else None
+                # An error page never shows listing links, so retry without waiting for them.
+                if status is not None and status >= 400:
+                    raise PlaywrightError(f"listing responded with HTTP {status}")
                 page.locator(LISTING_LINK_SELECTOR).first.wait_for(
                     state="visible",
-                    timeout=self._deadline.timeout_milliseconds(30),
+                    timeout=self._deadline.timeout_milliseconds(LISTING_LINK_TIMEOUT_SECONDS),
                 )
                 break
             except PlaywrightError as error:
