@@ -33,10 +33,6 @@ class Deadline:
         self.ensure_available()
         return max(100, int(min(maximum_seconds, self.remaining) * 1000))
 
-    def timeout_seconds(self, maximum_seconds: float) -> float:
-        self.ensure_available()
-        return max(0.1, min(maximum_seconds, self.remaining))
-
     def sleep(self, seconds: float) -> None:
         self.ensure_available()
         time.sleep(min(seconds, max(0.0, self.remaining)))

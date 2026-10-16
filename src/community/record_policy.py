@@ -10,6 +10,7 @@ from typing import Any
 from .models import (
     ISSUELINK_SOURCES,
     ISSUELINK_SOURCE_ORDER,
+    ORIGINAL_URL_FIELD,
     OUTPUT_FIELDS,
     SOURCE_FIELD,
     ListingCandidate,
@@ -44,7 +45,7 @@ def build_original_url_cache(records: list[Record]) -> dict[RecordKey, str]:
     cache: dict[RecordKey, str] = {}
     for record in records:
         key = record_key(record)
-        original_url = str(record.get("원문URL", "")).strip()
+        original_url = str(record.get(ORIGINAL_URL_FIELD, "")).strip()
         if key is not None and original_url:
             cache[key] = original_url
     return cache
@@ -193,11 +194,7 @@ class SnapshotBuilder:
             source_scores,
             retained_sources,
         )
-        record = candidate.to_record(
-            original_url,
-            min(source_scores.values()),
-            sources,
-        )
+        record = candidate.to_record(original_url, sources)
         if cached_record:
             for field, value in cached_record.items():
                 if field not in OUTPUT_FIELDS:

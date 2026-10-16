@@ -4,27 +4,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .settings import SOURCE_LISTS
 
+
+SITE_FIELD = "사이트"
+POST_ID_FIELD = "id값"
+TITLE_FIELD = "제목"
+WRITTEN_AT_FIELD = "작성시간"
+COMMENT_COUNT_FIELD = "댓글수"
+VIEW_COUNT_FIELD = "조회수"
+ORIGINAL_URL_FIELD = "원문URL"
 SOURCE_FIELD = "수집처"
-ISSUELINK_SOURCE = "issuelink"
-ISSUELINK_SOURCE_ORDER = (
-    "issuelink_read",
-    "issuelink_comment",
-)
-ISSUELINK_LEGACY_SOURCES = frozenset(("issuelink_adj", "issuelink_click"))
-ISSUELINK_SOURCES = frozenset(
-    (ISSUELINK_SOURCE, *ISSUELINK_SOURCE_ORDER, *ISSUELINK_LEGACY_SOURCES)
-)
 OUTPUT_FIELDS = (
-    "사이트",
-    "id값",
-    "제목",
-    "작성시간",
-    "댓글수",
-    "조회수",
-    "원문URL",
+    SITE_FIELD,
+    POST_ID_FIELD,
+    TITLE_FIELD,
+    WRITTEN_AT_FIELD,
+    COMMENT_COUNT_FIELD,
+    VIEW_COUNT_FIELD,
+    ORIGINAL_URL_FIELD,
     SOURCE_FIELD,
 )
+
+ISSUELINK_SOURCE_ORDER = tuple(name for name, _ in SOURCE_LISTS)
+# Source names written by earlier crawler versions; replaced whenever a record is refreshed.
+ISSUELINK_LEGACY_SOURCES = frozenset(("issuelink", "issuelink_adj", "issuelink_click"))
+ISSUELINK_SOURCES = frozenset((*ISSUELINK_SOURCE_ORDER, *ISSUELINK_LEGACY_SOURCES))
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,22 +69,17 @@ class ListingCandidate:
     def to_record(
         self,
         original_url: str,
-        score: int,
-        sources: list[dict[str, object]] | None = None,
+        sources: list[dict[str, object]],
     ) -> dict[str, object]:
         return {
-            "사이트": self.site,
-            "id값": self.post_id,
-            "제목": self.title,
-            "작성시간": self.written_at,
-            "댓글수": self.comment_count,
-            "조회수": self.view_count,
-            "원문URL": original_url,
-            SOURCE_FIELD: (
-                sources
-                if sources is not None
-                else [{"source": ISSUELINK_SOURCE, "score": score}]
-            ),
+            SITE_FIELD: self.site,
+            POST_ID_FIELD: self.post_id,
+            TITLE_FIELD: self.title,
+            WRITTEN_AT_FIELD: self.written_at,
+            COMMENT_COUNT_FIELD: self.comment_count,
+            VIEW_COUNT_FIELD: self.view_count,
+            ORIGINAL_URL_FIELD: original_url,
+            SOURCE_FIELD: sources,
         }
 
 

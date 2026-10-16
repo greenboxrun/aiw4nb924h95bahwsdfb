@@ -7,7 +7,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 from urllib.parse import urljoin, urlparse
 
-from .models import ListingCandidate, ListingPage
+from .models import (
+    POST_ID_FIELD,
+    SITE_FIELD,
+    WRITTEN_AT_FIELD,
+    ListingCandidate,
+    ListingPage,
+)
 
 
 # South Korea uses a fixed UTC+09:00 offset and does not observe DST.
@@ -26,7 +32,7 @@ def parse_listing_rows(
     for raw_row in raw_rows:
         href = _text_value(raw_row.get("href"))
         written_at = _text_value(raw_row.get("date"))
-        if is_expired({"작성시간": written_at}, retention_hours, now):
+        if is_written_before_retention(written_at, retention_hours, now):
             expired_count += 1
             continue
 
@@ -93,8 +99,8 @@ def parse_written_at(value: str) -> datetime | None:
 
 
 def record_key(record: dict[str, Any]) -> tuple[str, str] | None:
-    site = str(record.get("사이트", "")).strip()
-    post_id = str(record.get("id값", "")).strip()
+    site = str(record.get(SITE_FIELD, "")).strip()
+    post_id = str(record.get(POST_ID_FIELD, "")).strip()
     return (site, post_id) if site and post_id else None
 
 
@@ -102,7 +108,15 @@ def is_expired(
     record: dict[str, Any], retention_hours: int, now: datetime | None = None
 ) -> bool:
     """Return whether a record is older than the configured retention period."""
-    written_at = parse_written_at(str(record.get("작성시간", "")))
+    return is_written_before_retention(
+        str(record.get(WRITTEN_AT_FIELD, "")), retention_hours, now
+    )
+
+
+def is_written_before_retention(
+    written_at_text: str, retention_hours: int, now: datetime | None = None
+) -> bool:
+    written_at = parse_written_at(written_at_text)
     if written_at is None:
         # Records without a recognized absolute timestamp cannot be proven to
         # be within the KST retention window.
@@ -113,13 +127,3 @@ def is_expired(
     else:
         reference_time = reference_time.astimezone(KST)
     return written_at < reference_time - timedelta(hours=retention_hours)
-
-
-def remove_expired(
-    records: list[dict[str, Any]], retention_hours: int, now: datetime | None = None
-) -> list[dict[str, Any]]:
-    return [
-        record
-        for record in records
-        if not is_expired(record, retention_hours, now)
-    ]
