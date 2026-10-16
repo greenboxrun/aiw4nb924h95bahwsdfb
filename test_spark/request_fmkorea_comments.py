@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from src.common.github_workflows import (
     WorkflowRequest,
     WORKFLOW_ERRORS,
+    emit_json_result,
     run_workflow,
-    save_json_result,
 )
 
 WORKFLOW_FILE = "fmkorea-comments.yml"
@@ -20,7 +19,7 @@ ARTIFACT_PREFIX = "fmkorea-comments-"
 
 def validate_post_id(value: str) -> str:
     if not value.isdigit() or int(value) <= 0:
-        raise GitHubError("post_id must be a positive integer")
+        raise ValueError("post_id must be a positive integer")
     return value
 
 
@@ -39,11 +38,7 @@ def main() -> int:
                 completion_timeout_seconds=600,
             )
         )
-        if args.output:
-            save_json_result(result, args.output)
-            print(f"saved result to {args.output}")
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+        emit_json_result(result, args.output)
         return 0
     except WORKFLOW_ERRORS as error:
         print(f"FMKorea comment request failed: {error}", file=sys.stderr)

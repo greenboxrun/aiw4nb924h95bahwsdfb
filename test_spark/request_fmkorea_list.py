@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from src.common.github_workflows import (
     WorkflowRequest,
     WORKFLOW_ERRORS,
+    emit_json_result,
     run_workflow,
-    save_json_result,
 )
 
 WORKFLOW_FILE = "fmkorea-list.yml"
@@ -20,7 +19,7 @@ ARTIFACT_NAME = "fmkorea-list"
 
 def validate_pages(value: str) -> str:
     if not value.isdigit() or not 1 <= int(value) <= 6:
-        raise GitHubError("pages must be an integer from 1 through 6")
+        raise ValueError("pages must be an integer from 1 through 6")
     return str(int(value))
 
 
@@ -39,11 +38,7 @@ def main() -> int:
                 completion_timeout_seconds=900,
             )
         )
-        if args.output:
-            save_json_result(result, args.output)
-            print(f"saved result to {args.output}")
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+        emit_json_result(result, args.output)
         return 0
     except WORKFLOW_ERRORS as error:
         print(f"FMKorea list request failed: {error}", file=sys.stderr)
