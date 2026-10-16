@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import re
 import time
@@ -14,13 +13,13 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
+from src.common.files import atomic_write_json
 from src.common.paths import RESULT_ROOT
-from src.common.files import atomic_write_text
 
+from .browser import create_chrome_driver
 from .get_fmkorea_list import COMMENT_COUNT_RE, Post, parse_post_row
 
 
@@ -28,8 +27,14 @@ BASE_URL = (
     "https://www.issuelink.co.kr/community/listview/fmkorea/72/"
     "comment/_self/blank/blank/blank"
 )
+DEFAULT_OUTPUT = RESULT_ROOT / "topic" / "result.json"
+DEFAULT_PAGE_COUNT = 6
+MAX_PAGE_COUNT = 6
 DEFAULT_MIN_DELAY = 4.0
 DEFAULT_MAX_DELAY = 8.0
+POST_DOM_TIMEOUT_SECONDS = 35
+BROWSER_USER_AGENT = "Mozilla/5.0"
+FMKOREA_ROW_SELECTOR = "td.rank_bg.s_bg_fmkorea"
 POST_ID_RE = re.compile(r"/community/go/fmkorea/(\d+)(?:$|[/?#])")
 BLOCK_MARKERS = (
     "captcha",
@@ -60,24 +65,19 @@ def parse_page_posts(html: str) -> list[CrawledPost]:
         title_link = row.select_one(".title a[href]")
         if title_link is None:
             continue
-
-        source_url = title_link.get("href", "").strip()
-        match = POST_ID_RE.search(source_url)
+        match = POST_ID_RE.search(title_link.get("href", "").strip())
         if match is None:
             continue
         postid = match.group(1)
-        url = f"https://www.fmkorea.com/{postid}"
-
         posts.append(
             CrawledPost(
                 time=post.time,
                 title=post.title,
                 comments=post.comments,
-                url=url,
+                url=f"https://www.fmkorea.com/{postid}",
                 postid=postid,
             )
         )
-
     return posts
 
 
@@ -86,23 +86,19 @@ def log_page_diagnostics(*, url: str, driver: webdriver.Chrome, page_posts: list
     html = driver.page_source
     soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("table tbody tr")
-    source_rows = soup.select("table tbody tr td.rank_bg.s_bg_fmkorea")
+    source_rows = soup.select(f"table tbody tr {FMKOREA_ROW_SELECTOR}")
     source_texts = [
         cell.get_text(" ", strip=True)
         for cell in soup.select("table tbody tr td.rank_bg small")
     ]
-    comment_format_failures = 0
-    for row in rows:
-        title_element = row.select_one(".title")
-        if title_element and COMMENT_COUNT_RE.search(
-            title_element.get_text(" ", strip=True)
-        ) is None:
-            comment_format_failures += 1
-
+    comment_format_failures = sum(
+        1
+        for row in rows
+        if (title_element := row.select_one(".title"))
+        and COMMENT_COUNT_RE.search(title_element.get_text(" ", strip=True)) is None
+    )
     response_lower = html.lower()
-    detected_markers = [
-        marker for marker in BLOCK_MARKERS if marker in response_lower
-    ]
+    detected_markers = [marker for marker in BLOCK_MARKERS if marker in response_lower]
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
 
     print(f"[진단] 요청 URL: {url}")
@@ -136,21 +132,6 @@ def log_page_diagnostics(*, url: str, driver: webdriver.Chrome, page_posts: list
         print(f"[진단] 0개 응답 앞부분(최대 800자): {snippet!r}")
 
 
-def create_driver() -> webdriver.Chrome:
-    """GitHub Actions와 로컬에서 모두 동작하는 헤드리스 Chrome을 만든다."""
-    options = Options()
-    options.page_load_strategy = "eager"
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--lang=ko-KR")
-    options.add_argument("--user-agent=Mozilla/5.0")
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(45)
-    return driver
-
-
 def write_json(
     posts: list[Post],
     output: Path,
@@ -170,56 +151,52 @@ def write_json(
         ),
         "posts": [asdict(post) for post in posts],
     }
+    atomic_write_json(output, payload)
 
-    atomic_write_text(
-        output,
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-    )
+
+def load_list_page(driver: webdriver.Chrome, url: str, page: int) -> None:
+    """목록 페이지를 열고 펨코 게시글 행이 나타날 때까지 기다린다."""
+    print(f"[브라우저] {page}페이지 접속: {url}")
+    try:
+        try:
+            driver.get(url)
+        except TimeoutException:
+            print(
+                "[브라우저] 페이지 로딩 타임아웃이 발생했지만 "
+                "게시글 DOM이 나타나는지 계속 확인합니다."
+            )
+        WebDriverWait(driver, POST_DOM_TIMEOUT_SECONDS).until(
+            lambda current_driver: current_driver.find_elements(
+                By.CSS_SELECTOR, FMKOREA_ROW_SELECTOR
+            )
+        )
+    except TimeoutException as error:
+        log_page_diagnostics(url=url, driver=driver, page_posts=[])
+        raise RuntimeError(
+            f"{page}페이지에서 브라우저 인증 또는 게시글 로딩이 완료되지 않았습니다."
+        ) from error
 
 
 def fetch_pages(
-    page_count: int = 6,
+    page_count: int = DEFAULT_PAGE_COUNT,
     min_delay: float = DEFAULT_MIN_DELAY,
     max_delay: float = DEFAULT_MAX_DELAY,
 ) -> list[Post]:
     """1페이지부터 page_count페이지까지 순서대로 수집한다."""
-    if not 1 <= page_count <= 6:
-        raise ValueError("페이지 수는 1~6 사이여야 합니다.")
+    if not 1 <= page_count <= MAX_PAGE_COUNT:
+        raise ValueError(f"페이지 수는 1~{MAX_PAGE_COUNT} 사이여야 합니다.")
     if min_delay < 0 or max_delay < min_delay:
         raise ValueError("대기 시간 범위가 올바르지 않습니다.")
 
-    driver = create_driver()
+    driver = create_chrome_driver(user_agent=BROWSER_USER_AGENT)
     posts: list[Post] = []
 
     try:
         for page in range(1, page_count + 1):
             url = f"{BASE_URL}/{page}"
-            print(f"[브라우저] {page}페이지 접속: {url}")
-            try:
-                try:
-                    driver.get(url)
-                except TimeoutException:
-                    print(
-                        "[브라우저] 페이지 로딩 타임아웃이 발생했지만 "
-                        "게시글 DOM이 나타나는지 계속 확인합니다."
-                    )
-                WebDriverWait(driver, 35).until(
-                    lambda current_driver: current_driver.find_elements(
-                        By.CSS_SELECTOR, "td.rank_bg.s_bg_fmkorea"
-                    )
-                )
-            except TimeoutException as error:
-                log_page_diagnostics(url=url, driver=driver, page_posts=[])
-                raise RuntimeError(
-                    f"{page}페이지에서 브라우저 인증 또는 게시글 로딩이 완료되지 않았습니다."
-                ) from error
-
+            load_list_page(driver, url, page)
             page_posts = parse_page_posts(driver.page_source)
-            log_page_diagnostics(
-                url=url,
-                driver=driver,
-                page_posts=page_posts,
-            )
+            log_page_diagnostics(url=url, driver=driver, page_posts=page_posts)
             if not page_posts:
                 raise RuntimeError(
                     f"{page}페이지에서 게시글을 찾지 못했습니다. "
@@ -239,8 +216,14 @@ def fetch_pages(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="펨코 목록 최대 6페이지 수집")
-    parser.add_argument("-p", "--pages", type=int, default=6, help="수집할 페이지 수(기본값: 6)")
+    parser = argparse.ArgumentParser(description=f"펨코 목록 최대 {MAX_PAGE_COUNT}페이지 수집")
+    parser.add_argument(
+        "-p",
+        "--pages",
+        type=int,
+        default=DEFAULT_PAGE_COUNT,
+        help=f"수집할 페이지 수(기본값: {DEFAULT_PAGE_COUNT})",
+    )
     parser.add_argument(
         "--min-delay",
         type=float,
@@ -260,7 +243,7 @@ def main() -> int:
     except Exception as error:
         print(f"FMKorea list crawl failed: {error}")
         return 1
-    output = args.output or (RESULT_ROOT / "topic" / "result.json")
+    output = args.output or DEFAULT_OUTPUT
     write_json(posts, output, page_count=args.pages)
     print(f"총 {len(posts)}개 게시글을 저장했습니다: {output}")
     return 0
