@@ -14736,7 +14736,7 @@
     "수집처": [
       {
         "source": "issuelink_read",
-        "score": 921
+        "score": 920
       },
       {
         "source": "issuelink_comment",
@@ -15608,7 +15608,7 @@
     "수집처": [
       {
         "source": "issuelink_read",
-        "score": 835
+        "score": 834
       },
       {
         "source": "issuelink_comment",
